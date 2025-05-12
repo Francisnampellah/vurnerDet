@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
+      - NODE_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zap:
+        condition: service_started
+    networks:
+      - zap-network
+
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=novus
+      - POSTGRES_PASSWORD=Juan2010
+      - POSTGRES_DB=vurnerDB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - zap-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novus -d vurnerDB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zap:
+    image: zaproxy/zap-stable
+    user: zap
+    ports:
+      - "8080:8080"
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
+    networks:
+      - zap-network
+
+networks:
+  zap-network:
+    driver: bridge
+
+volumes:
+  postgres_data: 
