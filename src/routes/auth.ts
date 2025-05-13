@@ -2,8 +2,36 @@ import express, { Request, Response, Router, RequestHandler } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
+import crypto from 'crypto';
 
 const router: Router = express.Router();
+
+// Generate refresh token
+const generateRefreshToken = async (userId: string): Promise<string> => {
+  const token = crypto.randomBytes(40).toString('hex');
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
+
+  await prisma.refreshToken.create({
+    data: {
+      token,
+      userId,
+      expiresAt
+    }
+  });
+
+  return token;
+};
+
+// Generate access token
+const generateAccessToken = (userId: string): string => {
+  const signOptions: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN) || '1h' };
+  return jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET || 'your-super-secret-jwt-key',
+    signOptions
+  );
+};
 
 // Register new user
 const registerHandler: RequestHandler = async (req: Request, res: Response): Promise<void> => {
@@ -32,15 +60,15 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
       }
     });
 
-    // Generate token
-    const signOptions: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN) || '24h' };
-    const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET || 'your-super-secret-jwt-key',
-      signOptions
-    );
+    // Generate tokens
+    const accessToken = generateAccessToken(user.id);
+    const refreshToken = await generateRefreshToken(user.id);
 
-    res.status(201).json({ user, token });
+    res.status(201).json({ 
+      user: { id: user.id, email: user.email },
+      accessToken,
+      refreshToken 
+    });
   } catch (error) {
     res.status(400).json({ error: 'Invalid registration data' });
   }
@@ -68,21 +96,61 @@ const loginHandler: RequestHandler = async (req: Request, res: Response): Promis
       return;
     }
 
-    // Generate token
-    const signOptions: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN) || '24h' };
-    const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET || 'your-super-secret-jwt-key',
-      signOptions
-    );
+    // Generate tokens
+    const accessToken = generateAccessToken(user.id);
+    const refreshToken = await generateRefreshToken(user.id);
 
-    res.json({ user, token });
+    res.json({ 
+      user: { id: user.id, email: user.email },
+      accessToken,
+      refreshToken 
+    });
   } catch (error) {
     res.status(400).json({ error: 'Invalid login data' });
   }
 };
 
+// Refresh token
+const refreshTokenHandler: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      res.status(400).json({ error: 'Refresh token is required' });
+      return;
+    }
+
+    // Find refresh token in database
+    const tokenRecord = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+      include: { user: true }
+    });
+
+    if (!tokenRecord) {
+      res.status(401).json({ error: 'Invalid refresh token' });
+      return;
+    }
+
+    // Check if token is expired
+    if (tokenRecord.expiresAt < new Date()) {
+      await prisma.refreshToken.delete({
+        where: { id: tokenRecord.id }
+      });
+      res.status(401).json({ error: 'Refresh token expired' });
+      return;
+    }
+
+    // Generate new access token
+    const accessToken = generateAccessToken(tokenRecord.userId);
+
+    res.json({ accessToken });
+  } catch (error) {
+    res.status(400).json({ error: 'Invalid refresh token data' });
+  }
+};
+
 router.post('/register', registerHandler);
 router.post('/login', loginHandler);
+router.post('/refresh', refreshTokenHandler);
 
 export default router; 

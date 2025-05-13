@@ -12,13 +12,13 @@ import {
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
+// Apply auth middleware to all routes 
 router.use(auth);
 
-router.post('/spider/start', startSpiderScan);
+router.post('/spider/start', startSpiderScan as any);
 router.get('/spider/status/:scanId', checkSpiderStatus);
 router.get('/spider/results/:scanId', getSpiderResults);
-router.post('/active/start', startActiveScan);
+router.post('/active/start', startActiveScan as any);
 router.get('/active/status/:scanId', checkActiveScanStatus);
 
 router.get('/scan-sessions', getAllScanSessions);

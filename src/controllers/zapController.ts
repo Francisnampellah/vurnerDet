@@ -14,6 +14,15 @@ export const startSpiderScan = async (req: Request, res: Response) => {
   const { url } = req.body;
 
   try {
+    // Check if there's already a scan session for this URL
+    const existingSession = await prisma.scanSession.findFirst({
+      where: { url }
+    });
+
+    if (existingSession) {
+      return res.status(400).json({ error: 'A scan session already exists for this URL' });
+    }
+
     const response = await axios.get(`${ZAP_API_BASE}/JSON/spider/action/scan/`, {
       params: {
         url,
@@ -65,6 +74,20 @@ export const startActiveScan = async (req: Request, res: Response) => {
   const { url } = req.body;
 
   try {
+    // Check if there's an active scan in progress for this URL
+    const existingSession = await prisma.scanSession.findFirst({
+      where: { 
+        url,
+        activeStatus: {
+          gt: 0
+        }
+      }
+    });
+
+    if (existingSession) {
+      return res.status(400).json({ error: 'An active scan is already in progress for this URL' });
+    }
+
     const response = await axios.get(`${ZAP_API_BASE}/JSON/ascan/action/scan/`, {
       params: {
         url,

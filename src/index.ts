@@ -1,5 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import authRoutes from './routes/auth';
 import { auth } from './middleware/auth';
 import scanRoutes from "./routes/zap"
@@ -11,6 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors()); // Enable CORS for all routes
 app.use(express.json());
 
 // Routes
