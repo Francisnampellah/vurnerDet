@@ -40,7 +40,7 @@ services:
     networks:
       - zap-network
     command: |
-      sh -c "npm install && npx prisma generate && npx ts-node src/scripts/reset-db.ts && npm start"
+      sh -c "npm install && npx prisma generate && npm start"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
