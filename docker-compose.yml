@@ -46,11 +46,14 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
       - "traefik.port=80"
-      - "traefik.http.routers.backend.tls=true"
       - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
-      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.entrypoints=web,websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.tls=true"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.backend.middlewares=redirect-to-https"
+
 
   postgres:
     image: postgres:14-alpine
