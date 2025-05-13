@@ -17,15 +17,15 @@ services:
     command: |
       sh -c "npx ts-node src/scripts/reset-db.ts && npm start"
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=proxy
-      - traefik.port=80
-      - traefik.http.routers.backend.tls=true
-      - traefik.http.routers.backend.rule=Host(`security.bluetech.software`)
-      - traefik.http.routers.backend.entrypoints=websecure
-      - traefik.http.routers.backend.tls.certresolver=letsencrypt
-      - traefik.http.routers.backend.service=backend
-      - traefik.http.services.backend.loadbalancer.server.port=3000
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.port=80"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.service=backend"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
 
   traefik:
     image: traefik:2.8
@@ -34,18 +34,18 @@ services:
     networks:
       - zap-network
     ports:
-      - 80:80
-      - 443:443
+      - "80:80"
+      - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik.yml:/traefik.yml:ro
-      - ./acme.json:/acme.json
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik.yml:/traefik.yml:ro"
+      - "./acme.json:/acme.json"
     labels:
-      - traefik.enable=true
-      - traefik.port=80
-      - traefik.docker.network=zap-network
-      - traefik.http.routers.traefik.service=traefik
-      - traefik.http.routers.traefik.service=api@internal
+      - "traefik.enable=true"
+      - "traefik.port=80"
+      - "traefik.docker.network=zap-network"
+      - "traefik.http.routers.traefik.service=traefik"
+      - "traefik.http.routers.traefik.service=api@internal"
 
   postgres:
     image: postgres:14-alpine
