@@ -13,6 +13,12 @@ entryPoints:
   websecure:
     address: ":443"
 
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: zap-network
+
 certificatesResolvers:
   letsencrypt:
     acme:
@@ -21,11 +27,5 @@ certificatesResolvers:
       httpChallenge:
         entryPoint: web
 
-providers:
-  docker:
-    endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: false
-    network: zap-network
-
 log:
-  level: INFO 
+  level: INFO
