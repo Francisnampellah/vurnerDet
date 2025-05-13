@@ -1,4 +1,5 @@
 services:
+
   traefik:
     image: traefik:2.8
     container_name: traefik
@@ -20,6 +21,7 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.tls=true"
 
   backend:
     build: .
@@ -45,14 +47,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
-      - "traefik.port=80"
+      - "traefik.http.routers.backend-http.rule=Host(`security.bluetech.software`)"
+      - "traefik.http.routers.backend-http.entrypoints=web"
       - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
-      - "traefik.http.routers.backend.entrypoints=web,websecure"
+      - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.routers.backend.tls=true"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.routers.backend.middlewares=redirect-to-https"
+
 
 
   postgres:
@@ -87,6 +89,7 @@ services:
 
 networks:
   zap-network:
+    name: zap-network
     external: true
 
 volumes:

@@ -1,6 +1,11 @@
 entryPoints:
   web:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
   websecure:
     address: ":443"
 
@@ -11,7 +16,6 @@ api:
 providers:
   docker:
     exposedByDefault: false
-    network: zap-network
 
 certificatesResolvers:
   letsencrypt:
