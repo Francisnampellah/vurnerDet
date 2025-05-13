@@ -6,7 +6,8 @@ entryPoints:
 
 api:
   dashboard: true
-  insecure: true
+  insecure: false
+  entryPoint: websecure
 
 providers:
   docker:
@@ -23,3 +24,19 @@ certificatesResolvers:
 
 log:
   level: INFO
+
+http:
+  routers:
+    redirect-to-https:
+      entryPoints:
+        - web
+      rule: "HostRegexp(`{any:.*}`)"
+      service: noop@internal
+      middlewares:
+        - redirect-to-https
+
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
