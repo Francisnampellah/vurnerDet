@@ -1,4 +1,3 @@
-
 services:
   backend:
     build: .
@@ -18,13 +17,12 @@ services:
       sh -c "npx ts-node src/scripts/reset-db.ts && npm start"
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      - "traefik.port=80"
+      - "traefik.docker.network=zap-network"
+      - "traefik.port=3000"
       - "traefik.http.routers.backend.tls=true"
       - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.backend.service=backend"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
 
   traefik:
@@ -42,10 +40,11 @@ services:
       - "./acme.json:/acme.json"
     labels:
       - "traefik.enable=true"
-      - "traefik.port=80"
       - "traefik.docker.network=zap-network"
-      - "traefik.http.routers.traefik.service=traefik"
       - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
 
   postgres:
     image: postgres:14-alpine
@@ -79,6 +78,7 @@ services:
 
 networks:
   zap-network:
+    name: zap-network
     driver: bridge
 
 volumes:

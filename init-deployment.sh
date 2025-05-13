@@ -87,6 +87,12 @@ entryPoints:
   websecure:
     address: ":443"
 
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: zap-network
+
 certificatesResolvers:
   letsencrypt:
     acme:
@@ -94,12 +100,6 @@ certificatesResolvers:
       storage: "/acme.json"
       httpChallenge:
         entryPoint: web
-
-providers:
-  docker:
-    endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: false
-    network: zap-network
 
 log:
   level: INFO
@@ -112,9 +112,10 @@ chmod 600 acme.json
 # Ensure proper permissions
 sudo chown -R $USER:$USER .
 
-# Stop any running containers
-echo "Stopping any running containers..."
-docker-compose down
+# Stop any running containers and remove networks
+echo "Cleaning up existing containers and networks..."
+docker-compose down --remove-orphans
+docker network prune -f
 
 # Start the services
 echo "Starting services..."
