@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   traefik:
     image: traefik:2.8
@@ -14,17 +12,14 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./traefik.yml:/traefik.yml:ro"
       - "./acme.json:/acme.json"
-      - "./traefik_users.htpasswd:/traefik_users.htpasswd:ro"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
       - "traefik.port=80"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.traefik.middlewares=traefik-auth@docker"
-      - "traefik.http.middlewares.traefik-auth.basicauth.usersfile=/traefik_users.htpasswd"
 
   backend:
     build: .
@@ -36,9 +31,8 @@ services:
     ports:
       - 3000:3000
     environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
-      - NODE_ENV=${NODE_ENV:-production}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
+      - NODE_ENV=development
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,31 +41,25 @@ services:
     networks:
       - zap-network
     command: |
-      sh -c "npm ci && npx prisma generate && npm start"
+      sh -c "npm install && npx prisma generate && npm start"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
       - "traefik.port=80"
       - "traefik.http.routers.backend.tls=true"
-      - "traefik.http.routers.backend.rule=Host(`security.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
-      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
-      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
-      - "traefik.http.routers.backend.middlewares=security-headers@docker"
 
   postgres:
     image: postgres:14-alpine
-    container_name: postgres
-    restart: always
     ports:
       - 5432:5432
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=novus
+      - POSTGRES_PASSWORD=Juan2010
+      - POSTGRES_DB=vurnerDB
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -79,126 +67,24 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U ${DB_USER} -d ${DB_NAME}
+        - pg_isready -U novus -d vurnerDB
       interval: 5s
       timeout: 5s
       retries: 5
 
   zap:
     image: zaproxy/zap-stable
-    container_name: zap
-    restart: always
     user: zap
     ports:
-      - "8080:8080"
-    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
+      - 8080:8080
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true -config api.disablekey=true
     networks:
       - zap-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=zap-network"
-      - "traefik.http.routers.zap.rule=Host(`zap.${DOMAIN_NAME}`)"
-      - "traefik.http.routers.zap.entrypoints=websecure"
-      - "traefik.http.routers.zap.tls.certresolver=letsencrypt"
-      - "traefik.http.services.zap.loadbalancer.server.port=8080"
-      - "traefik.http.routers.zap.middlewares=zap-auth@docker"
-      - "traefik.http.middlewares.zap-auth.basicauth.usersfile=/traefik_users.htpasswd"
 
 networks:
   zap-network:
-    name: zap-network
+    external: true
 
 volumes:
-  postgres_data:
-    driver: local
-
-# services:
-#   traefik:
-#     image: traefik:2.8
-#     container_name: traefik
-#     restart: always
-#     networks:
-#       - zap-network
-#     ports:
-#       - "80:80"
-#       - "443:443"
-#     volumes:
-#       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-#       - "./traefik.yml:/traefik.yml:ro"
-#       - "./acme.json:/acme.json"
-#     labels:
-#       - "traefik.enable=true"
-#       - "traefik.docker.network=zap-network"
-#       - "traefik.port=80"
-#       - "traefik.http.routers.traefik.service=api@internal"
-#       - "traefik.http.routers.traefik.entrypoints=websecure"
-#       - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
-#       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-
-#   backend:
-#     build: .
-#     container_name: backend-container
-#     restart: always
-#     volumes:
-#       - .:/app
-#       - /app/node_modules
-#     ports:
-#       - 3000:3000
-#     environment:
-#       - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
-#       - NODE_ENV=development
-#     depends_on:
-#       postgres:
-#         condition: service_healthy
-#       zap:
-#         condition: service_started
-#     networks:
-#       - zap-network
-#     command: |
-#       sh -c "npm install && npx prisma generate && npm start"
-#     labels:
-#       - "traefik.enable=true"
-#       - "traefik.docker.network=zap-network"
-#       - "traefik.port=80"
-#       - "traefik.http.routers.backend.tls=true"
-#       - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
-#       - "traefik.http.routers.backend.entrypoints=websecure"
-#       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
-#       - "traefik.http.services.backend.loadbalancer.server.port=3000"
-
-#   postgres:
-#     image: postgres:14-alpine
-#     ports:
-#       - 5432:5432
-#     environment:
-#       - POSTGRES_USER=novus
-#       - POSTGRES_PASSWORD=Juan2010
-#       - POSTGRES_DB=vurnerDB
-#     volumes:
-#       - postgres_data:/var/lib/postgresql/data
-#     networks:
-#       - zap-network
-#     healthcheck:
-#       test:
-#         - CMD-SHELL
-#         - pg_isready -U novus -d vurnerDB
-#       interval: 5s
-#       timeout: 5s
-#       retries: 5
-
-#   zap:
-#     image: zaproxy/zap-stable
-#     user: zap
-#     ports:
-#       - 8080:8080
-#     command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.*
-#       -config api.addrs.addr.regex=true -config api.disablekey=true
-#     networks:
-#       - zap-network
-
-# networks:
-#   zap-network:
-#     external: true
-
-# volumes:
-#   postgres_data: null
+  postgres_data: null
