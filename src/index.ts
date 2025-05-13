@@ -1,12 +1,16 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import { auth } from './middleware/auth';
 import scanRoutes from "./routes/zap"
 
 // Load environment variables
 dotenv.config();
+
+// Initialize Prisma Client
+const prisma = new PrismaClient();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
