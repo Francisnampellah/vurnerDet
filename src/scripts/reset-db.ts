@@ -1,20 +1,23 @@
 import { PrismaClient } from '@prisma/client';
-import { execSync } from 'child_process';
+
+const prisma = new PrismaClient();
 
 async function resetDatabase() {
   try {
-    console.log('🔄 Resetting database...');
+    // Drop all tables
+    await prisma.$executeRaw`DROP SCHEMA public CASCADE;`;
+    await prisma.$executeRaw`CREATE SCHEMA public;`;
     
-    // Run Prisma migrations reset
-    execSync('npx prisma migrate reset --force', { stdio: 'inherit' });
+    // Run migrations
+    await prisma.$executeRaw`GRANT ALL ON SCHEMA public TO novus;`;
+    await prisma.$executeRaw`GRANT ALL ON SCHEMA public TO public;`;
     
-    // Run Prisma generate to update client
-    execSync('npx prisma generate', { stdio: 'inherit' });
-    
-    console.log('✅ Database reset completed successfully');
+    console.log('Database reset successful');
   } catch (error) {
-    console.error('❌ Error resetting database:', error);
+    console.error('Error resetting database:', error);
     process.exit(1);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 

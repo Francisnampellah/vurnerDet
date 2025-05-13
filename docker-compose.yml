@@ -25,7 +25,8 @@ services:
     container_name: backend-container
     restart: always
     volumes:
-      - ./backend:/app
+      - .:/app
+      - /app/node_modules
     ports:
       - 3000:3000
     environment:
@@ -39,7 +40,7 @@ services:
     networks:
       - zap-network
     command: |
-      sh -c "npx ts-node src/scripts/reset-db.ts && npm start"
+      sh -c "npm install && npx prisma generate && npx ts-node src/scripts/reset-db.ts && npm start"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
@@ -49,8 +50,6 @@ services:
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
-
-  
 
   postgres:
     image: postgres:14-alpine
