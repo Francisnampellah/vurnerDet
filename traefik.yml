@@ -6,8 +6,8 @@ entryPoints:
 
 api:
   dashboard: true
-  insecure: false
-  entryPoint: websecure
+  insecure: true
+  entryPoint: websecure  # API dashboard should use a defined entryPoint
 
 providers:
   docker:
@@ -20,7 +20,7 @@ certificatesResolvers:
       email: admin@bluetech.software
       storage: acme.json
       httpChallenge:
-        entryPoint: web
+        entryPoint: web  # Use the "web" entrypoint for the HTTP challenge
 
 log:
   level: INFO
@@ -29,7 +29,7 @@ http:
   routers:
     redirect-to-https:
       entryPoints:
-        - web
+        - web  # Redirect router for HTTP traffic
       rule: "HostRegexp(`{any:.*}`)"
       service: noop@internal
       middlewares:
