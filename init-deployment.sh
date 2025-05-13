@@ -70,9 +70,51 @@ echo "Setting up deployment environment..."
 mkdir -p security_backend
 cd security_backend
 
+# Create and configure traefik.yml
+cat > traefik.yml << 'EOL'
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "admin@bluetech.software"
+      storage: "/acme.json"
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: zap-network
+
+log:
+  level: INFO
+EOL
+
 # Create acme.json for Traefik SSL certificates
 touch acme.json
 chmod 600 acme.json
+
+# Ensure proper permissions
+sudo chown -R $USER:$USER .
+
+# Stop any running containers
+echo "Stopping any running containers..."
+docker-compose down
 
 # Start the services
 echo "Starting services..."
@@ -80,4 +122,5 @@ docker-compose up -d
 
 echo "Deployment initialization completed!"
 echo "Please log out and log back in for Docker group changes to take effect."
-echo "You can then run 'docker ps' to verify the installation." 
+echo "You can then run 'docker ps' to verify the installation."
+echo "To check Traefik logs, run: docker logs -f traefik" 
