@@ -70,7 +70,8 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
       refreshToken 
     });
   } catch (error) {
-    res.status(400).json({ error: 'Invalid registration data' });
+    console.error('Registration error:', error);
+    res.status(400).json({ error: 'Invalid registration data', details: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
