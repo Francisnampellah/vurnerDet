@@ -16,10 +16,10 @@ const router = express.Router();
 router.use(auth);
 
 router.post('/spider/start', startSpiderScan as any);
-router.get('/spider/status/:scanId', checkSpiderStatus);
-router.get('/spider/results/:scanId', getSpiderResults);
+router.get('/spider/status/:scanId', checkSpiderStatus as any);
+router.get('/spider/results/:scanId', getSpiderResults as any);
 router.post('/active/start', startActiveScan as any);
-router.get('/active/status/:scanId', checkActiveScanStatus);
+router.get('/active/status/:scanId', checkActiveScanStatus as any);
 
 router.get('/scan-sessions', getAllScanSessions);
 
