@@ -1,30 +1,4 @@
 services:
-  backend:
-    build: .
-    ports:
-      - 3000:3000
-    environment:
-      - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
-      - NODE_ENV=development
-    depends_on:
-      postgres:
-        condition: service_healthy
-      zap:
-        condition: service_started
-    networks:
-      - zap-network
-    command: |
-      sh -c "npx ts-node src/scripts/reset-db.ts && npm start"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=zap-network"
-      - "traefik.port=3000"
-      - "traefik.http.routers.backend.tls=true"
-      - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
-      - "traefik.http.routers.backend.entrypoints=websecure"
-      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.backend.loadbalancer.server.port=3000"
-
   traefik:
     image: traefik:2.8
     container_name: traefik
@@ -45,6 +19,38 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
+
+  backend:
+    build: .
+    container_name: backend-container
+    restart: always
+    volumes:
+      - ./backend:/app
+    ports:
+      - 3000:3000
+    environment:
+      - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
+      - NODE_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zap:
+        condition: service_started
+    networks:
+      - zap-network
+    command: |
+      sh -c "npx ts-node src/scripts/reset-db.ts && npm start"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=zap-network"
+      - "traefik.port=80"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.routers.backend.rule=Host(`security.bluetech.software`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+
+  
 
   postgres:
     image: postgres:14-alpine
@@ -78,8 +84,7 @@ services:
 
 networks:
   zap-network:
-    name: zap-network
-    driver: bridge
+    external: true
 
 volumes:
   postgres_data: null
