@@ -9,11 +9,13 @@ const zapController_1 = require("../controllers/zapController");
 const router = express_1.default.Router();
 // Apply auth middleware to all routes 
 router.use(auth_1.auth);
-router.post('/spider/start', zapController_1.startSpiderScan);
-router.get('/spider/status/:scanId', zapController_1.checkSpiderStatus);
-router.get('/spider/results/:scanId', zapController_1.getSpiderResults);
-router.post('/active/start', zapController_1.startActiveScan);
-router.get('/active/status/:scanId', zapController_1.checkActiveScanStatus);
-router.get('/scan-sessions', zapController_1.getAllScanSessions);
-router.get('/alerts', zapController_1.getAlerts); // ?baseUrl=https://example.com
+router.post("/Fullscan", zapController_1.startFullScan);
+router.get("/getAllScans", zapController_1.getAllScans);
+// router.post('/spider/start', startSpiderScan as any);
+// router.get('/spider/status/:scanId', checkSpiderStatus as any);
+// router.get('/spider/results/:scanId', getSpiderResults as any);
+// router.post('/active/start', startActiveScan as any);
+// router.get('/active/status/:scanId', checkActiveScanStatus as any);
+// router.get('/scan-sessions', getAllScanSessions);
+// router.get('/alerts', getAlerts); // ?baseUrl=https://example.com
 exports.default = router;

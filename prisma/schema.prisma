@@ -5,7 +5,8 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -20,6 +21,7 @@ model User {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
+  scanSessions  ScanSession[]  // Add relation to ScanSession
 }
 
 model RefreshToken {
@@ -35,16 +37,27 @@ model RefreshToken {
 }
 
 model ScanSession {
-  id            Int      @id @default(autoincrement())
-  url           String
-  spiderId      String?
-  activeId      String?
-  spiderStatus  Int      @default(0) // percentage (0–100)
-  activeStatus  Int      @default(0) // percentage (0–100)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
+  id                  Int       @id @default(autoincrement())
+  url                 String
+  ipAddress          String?
+  startedAt          DateTime  @default(now())
+  webServer          String?
+  technologies       Json?     // Array of detected technologies
+  authenticationMethod String?
+  spiderId           String?
+  activeId           String?
+  spiderStatus       Int       @default(0)
+  activeStatus       Int       @default(0)
+  spiderResults      Json?
+  activeResults      Json?
+  translatedResults  Json?     // Translated results for non-technical personnel
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  userId             String    // Foreign key to User
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}
 
 enum ScanStatus {
   IN_PROGRESS
