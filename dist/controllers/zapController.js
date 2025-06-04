@@ -118,7 +118,7 @@ const startFullScan = async (req, res) => {
         }
         // If no existing scan, proceed with new scan
         const metadata = await getTargetMetadata(url);
-        const technologies = await getDetectedTechnologies(url);
+        // const technologies = await getDetectedTechnologies(url);
         const spiderResp = await axios_1.default.get(`${ZAP_API_BASE}/JSON/spider/action/scan/`, {
             params: { url, apikey: ZAP_API_KEY },
         });
@@ -129,7 +129,7 @@ const startFullScan = async (req, res) => {
                 ipAddress: metadata.ipAddress,
                 webServer: metadata.webServer,
                 authenticationMethod: metadata.authenticationMethod,
-                technologies: technologies,
+                technologies: [],
                 spiderId,
                 spiderStatus: 0,
                 userId,

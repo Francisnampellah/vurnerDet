@@ -8,6 +8,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const crypto_1 = __importDefault(require("crypto"));
+const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
 // Generate refresh token
 const generateRefreshToken = async (userId) => {
@@ -128,7 +129,101 @@ const refreshTokenHandler = async (req, res) => {
         res.status(400).json({ error: 'Invalid refresh token data' });
     }
 };
+// Logout handler
+const logoutHandler = async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            res.status(400).json({ error: 'Refresh token is required' });
+            return;
+        }
+        // Delete the refresh token from database
+        await prisma_1.default.refreshToken.deleteMany({
+            where: { token: refreshToken }
+        });
+        res.json({ message: 'Logged out successfully' });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Logout failed' });
+    }
+};
+// Change password handler
+const changePasswordHandler = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const userId = req.user?.id;
+        // Assuming user ID is attached by auth middleware
+        console.log("===============");
+        console.log(currentPassword, newPassword);
+        console.log("userId", userId);
+        console.log("===============");
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        // Get user
+        const user = await prisma_1.default.user.findUnique({
+            where: { id: userId }
+        });
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        // Verify current password
+        const isMatch = await bcryptjs_1.default.compare(currentPassword, user.password);
+        if (!isMatch) {
+            res.status(401).json({ error: 'Current password is incorrect' });
+            return;
+        }
+        // Hash new password
+        const salt = await bcryptjs_1.default.genSalt(10);
+        const hashedPassword = await bcryptjs_1.default.hash(newPassword, salt);
+        // Update password
+        await prisma_1.default.user.update({
+            where: { id: userId },
+            data: { password: hashedPassword }
+        });
+        // Delete all refresh tokens for this user
+        await prisma_1.default.refreshToken.deleteMany({
+            where: { userId }
+        });
+        res.json({ message: 'Password changed successfully' });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Password change failed' });
+    }
+};
+// Get current user handler
+const meHandler = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        const user = await prisma_1.default.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                createdAt: true,
+                updatedAt: true
+            }
+        });
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        res.json({ user });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Failed to fetch user data' });
+    }
+};
 router.post('/register', registerHandler);
 router.post('/login', loginHandler);
 router.post('/refresh', refreshTokenHandler);
+router.post('/logout', logoutHandler);
+router.post('/change-password', auth_1.auth, changePasswordHandler);
+router.get('/me', auth_1.auth, meHandler);
 exports.default = router;
