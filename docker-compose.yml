@@ -13,13 +13,15 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./traefik.yml:/traefik.yml:ro"
       - "./acme.json:/acme.json"
+    environment:
+      - TZ=UTC
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
-      - "traefik.port=80"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
+      - "traefik.http.routers.traefik.tls=true"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dashboard.tls=true"
 
