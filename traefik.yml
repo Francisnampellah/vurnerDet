@@ -8,13 +8,6 @@ entryPoints:
           scheme: https
   websecure:
     address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
-        domains:
-          - main: "bluetech.software"
-            sans:
-              - "*.bluetech.software"
 
 api:
   dashboard: true
@@ -31,7 +24,6 @@ certificatesResolvers:
       storage: acme.json
       httpChallenge:
         entryPoint: web
-      tlsChallenge: {}
 
 log:
   level: INFO
