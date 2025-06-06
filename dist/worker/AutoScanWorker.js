@@ -113,21 +113,129 @@ async function updateScans() {
                     });
                     if (newStatus === 100) {
                         console.log(`Active scan completed for session ${id}, fetching alerts...`);
-                        const alertsResp = await axios_1.default.get(`${ZAP_API_BASE}/JSON/core/view/alerts/`, {
-                            params: { baseurl: url, apikey: ZAP_API_KEY },
-                        });
-                        // Translate alerts to non-technical language
-                        const translatedAlerts = await Promise.all(alertsResp.data.alerts.map(async (alert) => ({
-                            nonTechnicalDescription: await translateAlertToNonTechnical(alert)
-                        })));
+                        let retryCount = 0;
+                        const maxRetries = 3;
+                        let alertsWithTranslations = null;
+                        while (retryCount < maxRetries) {
+                            try {
+                                const alertsResp = await axios_1.default.get(`${ZAP_API_BASE}/JSON/core/view/alerts/`, {
+                                    params: { baseurl: url, apikey: ZAP_API_KEY },
+                                });
+                                if (!alertsResp.data || !alertsResp.data.alerts) {
+                                    console.error(`Invalid response format for session ${id}:`, alertsResp.data);
+                                    throw new Error('Invalid response format from ZAP API');
+                                }
+                                console.log(`Fetched ${alertsResp.data.alerts.length} alerts for session ${id}`);
+                                // Add non-technical descriptions to each alert
+                                alertsWithTranslations = await Promise.all(alertsResp.data.alerts.map(async (alert) => {
+                                    try {
+                                        const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
+                                        return {
+                                            ...alert,
+                                            nonTechnicalDescription
+                                        };
+                                    }
+                                    catch (translationError) {
+                                        console.error(`Error translating alert for session ${id}:`, translationError);
+                                        // Return original alert without translation
+                                        return alert;
+                                    }
+                                }));
+                                if (alertsWithTranslations && alertsWithTranslations.length > 0) {
+                                    break; // Successfully got results, exit retry loop
+                                }
+                            }
+                            catch (err) {
+                                console.error(`Error fetching alerts for session ${id} (attempt ${retryCount + 1}/${maxRetries}):`, err);
+                                retryCount++;
+                                if (retryCount < maxRetries) {
+                                    console.log(`Waiting ${retryDelay}ms before retry...`);
+                                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                                }
+                            }
+                        }
+                        if (alertsWithTranslations && alertsWithTranslations.length > 0) {
+                            await prisma.scanSession.update({
+                                where: { id },
+                                data: {
+                                    activeResults: alertsWithTranslations
+                                },
+                            });
+                            console.log(`Successfully saved ${alertsWithTranslations.length} alerts for session ${id}`);
+                        }
+                        else {
+                            console.error(`Failed to fetch valid alerts for session ${id} after ${maxRetries} attempts`);
+                            // Update the session to indicate the failure
+                            await prisma.scanSession.update({
+                                where: { id },
+                                data: {
+                                    activeResults: [], // Set empty array instead of null
+                                    activeStatus: 100 // Keep status at 100
+                                },
+                            });
+                        }
+                    }
+                }
+                else if (activeId && activeStatus === 100 && !session.activeResults) {
+                    // Handle case where status is 100 but results are null
+                    console.log(`Found session ${id} with activeStatus 100 but null results. Fetching alerts...`);
+                    let retryCount = 0;
+                    const maxRetries = 3;
+                    let alertsWithTranslations = null;
+                    while (retryCount < maxRetries) {
+                        try {
+                            const alertsResp = await axios_1.default.get(`${ZAP_API_BASE}/JSON/core/view/alerts/`, {
+                                params: { baseurl: url, apikey: ZAP_API_KEY },
+                            });
+                            if (!alertsResp.data || !alertsResp.data.alerts) {
+                                console.error(`Invalid response format for session ${id}:`, alertsResp.data);
+                                throw new Error('Invalid response format from ZAP API');
+                            }
+                            console.log(`Fetched ${alertsResp.data.alerts.length} alerts for session ${id}`);
+                            alertsWithTranslations = await Promise.all(alertsResp.data.alerts.map(async (alert) => {
+                                try {
+                                    const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
+                                    return {
+                                        ...alert,
+                                        nonTechnicalDescription
+                                    };
+                                }
+                                catch (translationError) {
+                                    console.error(`Error translating alert for session ${id}:`, translationError);
+                                    // Return original alert without translation
+                                    return alert;
+                                }
+                            }));
+                            if (alertsWithTranslations && alertsWithTranslations.length > 0) {
+                                break;
+                            }
+                        }
+                        catch (err) {
+                            console.error(`Error fetching alerts for session ${id} (attempt ${retryCount + 1}/${maxRetries}):`, err);
+                            retryCount++;
+                            if (retryCount < maxRetries) {
+                                console.log(`Waiting ${retryDelay}ms before retry...`);
+                                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                            }
+                        }
+                    }
+                    if (alertsWithTranslations && alertsWithTranslations.length > 0) {
                         await prisma.scanSession.update({
                             where: { id },
                             data: {
-                                activeResults: alertsResp.data.alerts,
-                                translatedResults: translatedAlerts
+                                activeResults: alertsWithTranslations
                             },
                         });
-                        console.log(`Active scan results and translations saved for session ${id}`);
+                        console.log(`Successfully saved ${alertsWithTranslations.length} alerts for session ${id}`);
+                    }
+                    else {
+                        console.error(`Failed to fetch valid alerts for session ${id} after ${maxRetries} attempts`);
+                        await prisma.scanSession.update({
+                            where: { id },
+                            data: {
+                                activeResults: []
+                            },
+                        });
                     }
                 }
             }
