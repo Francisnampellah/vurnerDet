@@ -144,28 +144,31 @@ async function updateScans() {
 
             while (retryCount < maxRetries) {
               try {
+                console.log(`Attempting to fetch alerts from ZAP API (attempt ${retryCount + 1}/${maxRetries})...`);
                 const alertsResp = await axios.get(`${ZAP_API_BASE}/JSON/core/view/alerts/`, {
                   params: { baseurl: url, apikey: ZAP_API_KEY },
                 });
 
                 if (!alertsResp.data || !alertsResp.data.alerts) {
-                  console.error(`Invalid response format for session ${id}:`, alertsResp.data);
+                  console.error(`Invalid response format for session ${id}:`, JSON.stringify(alertsResp.data, null, 2));
                   throw new Error('Invalid response format from ZAP API');
                 }
 
                 console.log(`Fetched ${alertsResp.data.alerts.length} alerts for session ${id}`);
 
                 // Add non-technical descriptions to each alert
+                console.log('Starting translation of alerts...');
                 alertsWithTranslations = await Promise.all(
-                  alertsResp.data.alerts.map(async (alert: any) => {
+                  alertsResp.data.alerts.map(async (alert: any, index: number) => {
                     try {
+                      console.log(`Translating alert ${index + 1}/${alertsResp.data.alerts.length}...`);
                       const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
                       return {
                         ...alert,
                         nonTechnicalDescription
                       };
                     } catch (translationError) {
-                      console.error(`Error translating alert for session ${id}:`, translationError);
+                      console.error(`Error translating alert ${index + 1} for session ${id}:`, translationError);
                       // Return original alert without translation
                       return alert;
                     }
@@ -173,10 +176,19 @@ async function updateScans() {
                 );
 
                 if (alertsWithTranslations && alertsWithTranslations.length > 0) {
+                  console.log(`Successfully processed ${alertsWithTranslations.length} alerts`);
                   break; // Successfully got results, exit retry loop
+                } else {
+                  console.error('No alerts were processed successfully');
+                  throw new Error('No alerts processed');
                 }
-              } catch (err) {
-                console.error(`Error fetching alerts for session ${id} (attempt ${retryCount + 1}/${maxRetries}):`, err);
+              } catch (err: any) {
+                console.error(`Error in alert processing for session ${id} (attempt ${retryCount + 1}/${maxRetries}):`, {
+                  error: err.message,
+                  stack: err.stack,
+                  url,
+                  activeId
+                });
                 retryCount++;
                 if (retryCount < maxRetries) {
                   console.log(`Waiting ${retryDelay}ms before retry...`);
@@ -245,7 +257,7 @@ async function updateScans() {
               if (alertsWithTranslations && alertsWithTranslations.length > 0) {
                 break;
               }
-            } catch (err) {
+            } catch (err: any) {
               console.error(`Error fetching alerts for session ${id} (attempt ${retryCount + 1}/${maxRetries}):`, err);
               retryCount++;
               if (retryCount < maxRetries) {
