@@ -212,20 +212,71 @@ async function updateScans() {
 
             console.log(`Fetched ${alertsResp.alerts.length} alerts for session ${id}`);
 
-            // Add non-technical descriptions to each alert
-            console.log('Starting translation of alerts...');
+            // Create a Map to store unique alerts based on alert name
+            const uniqueAlertsMap = new Map();
+            
+            // Group alerts by name and collect URLs
+            alertsResp.alerts.forEach((alert: any) => {
+              const key = alert.name;
+              if (!uniqueAlertsMap.has(key)) {
+                uniqueAlertsMap.set(key, {
+                  ...alert,
+                  urls: [alert.url]
+                });
+              } else {
+                const existingAlert = uniqueAlertsMap.get(key);
+                if (!existingAlert.urls.includes(alert.url)) {
+                  existingAlert.urls.push(alert.url);
+                }
+              }
+            });
+
+            const uniqueAlerts = Array.from(uniqueAlertsMap.values());
+            console.log(`Found ${uniqueAlerts.length} unique alerts after grouping by name`);
+
+            // Add non-technical descriptions to each unique alert
+            console.log('Starting translation of unique alerts...');
+            
             const alertsWithTranslations = await Promise.all(
-              alertsResp.alerts.map(async (alert: any, index: number) => {
+              uniqueAlerts.map(async (alert: any, index: number) => {
                 try {
-                  console.log(`Translating alert ${index + 1}/${alertsResp.alerts.length}...`);
+                  console.log(`Translating alert ${index + 1}/${uniqueAlerts.length}...`);
                   const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
-                  return {
+                  const processedAlert = {
                     ...alert,
-                    nonTechnicalDescription
+                    nonTechnicalDescription,
+                    risk: alert.risk || 'Unknown',
+                    confidence: alert.confidence || 'Unknown',
+                    tags: alert.tags || {},
+                    cweid: alert.cweid || '',
+                    wascid: alert.wascid || '',
+                    solution: alert.solution || '',
+                    reference: alert.reference || '',
+                    description: alert.description || '',
+                    urls: alert.urls || []
                   };
+
+                  // Log an example of the first alert
+                  if (index === 0) {
+                    console.log('Example of processed alert:', JSON.stringify(processedAlert, null, 2));
+                  }
+
+                  return processedAlert;
                 } catch (translationError) {
                   console.error(`Error translating alert ${index + 1} for session ${id}:`, translationError);
-                  return alert;
+                  return {
+                    ...alert,
+                    nonTechnicalDescription: alert.description, // Fallback to original description
+                    risk: alert.risk || 'Unknown',
+                    confidence: alert.confidence || 'Unknown',
+                    tags: alert.tags || {},
+                    cweid: alert.cweid || '',
+                    wascid: alert.wascid || '',
+                    solution: alert.solution || '',
+                    reference: alert.reference || '',
+                    description: alert.description || '',
+                    urls: alert.urls || []
+                  };
                 }
               })
             );
