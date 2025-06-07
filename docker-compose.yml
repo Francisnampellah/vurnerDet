@@ -1,7 +1,7 @@
 services:
 
   traefik:
-    image: traefik:2.8
+    image: traefik:2.10
     container_name: traefik
     restart: always
     networks:
@@ -17,9 +17,10 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=zap-network"
       - "traefik.port=80"
+
+      - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.bluetech.software`)"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dashboard.tls=true"
 
