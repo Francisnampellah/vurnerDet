@@ -108,6 +108,7 @@ async function waitForDatabase(retries = maxRetries): Promise<void> {
 
 async function translateAlertToNonTechnical(alert: any): Promise<string> {
   try {
+    console.log(`Making translation request for alert: ${alert.name}`);
     const response = await axios.post(
       HUGGINGFACE_API_URL,
       {
@@ -120,9 +121,21 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
         },
       }
     );
-    return response.data[0].generated_text;
-  } catch (error) {
-    console.error('Error translating alert:', error);
+
+    if (!response.data || !response.data[0] || !response.data[0].generated_text) {
+      console.error('Invalid response format from Hugging Face API:', JSON.stringify(response.data));
+      return alert.description;
+    }
+
+    const translatedText = response.data[0].generated_text;
+    console.log(`Successfully translated alert. Original: "${alert.description.substring(0, 100)}..." -> Translated: "${translatedText.substring(0, 100)}..."`);
+    return translatedText;
+  } catch (error: any) {
+    console.error('Error translating alert:', {
+      error: error.message,
+      response: error.response?.data,
+      alertName: alert.name
+    });
     return alert.description; // Return original description if translation fails
   }
 }
@@ -256,14 +269,16 @@ async function updateScans() {
                     urls: alert.urls || []
                   };
 
-                  // Log an example of the first alert
-                  if (index === 0) {
-                    console.log('Example of processed alert:', JSON.stringify(processedAlert, null, 2));
-                  }
+                  // Log the processed alert with translation
+                  console.log(`Processed alert ${index + 1} with translation:`, {
+                    name: processedAlert.name,
+                    hasTranslation: !!processedAlert.nonTechnicalDescription,
+                    translationLength: processedAlert.nonTechnicalDescription?.length
+                  });
 
                   return processedAlert;
                 } catch (translationError) {
-                  console.error(`Error translating alert ${index + 1} for session ${id}:`, translationError);
+                  console.error(`Error processing alert ${index + 1} for session ${id}:`, translationError);
                   return {
                     ...alert,
                     nonTechnicalDescription: alert.description, // Fallback to original description
@@ -282,6 +297,7 @@ async function updateScans() {
             );
 
             if (alertsWithTranslations && alertsWithTranslations.length > 0) {
+              console.log(`Saving ${alertsWithTranslations.length} alerts with translations to database...`);
               await prisma.scanSession.update({
                 where: { id },
                 data: { 
