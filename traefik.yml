@@ -20,7 +20,7 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: admin@bluetech.software
+      email: namps@bluetech.software
       storage: acme.json
       httpChallenge:
         entryPoint: web

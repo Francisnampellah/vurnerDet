@@ -1,43 +1,59 @@
 #!/bin/bash
 
-# Update package list and install prerequisites
-sudo apt-get update -y
-sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+set -e
 
-# Add Docker's official GPG key
+# Function to log messages
+log() {
+  echo -e "\033[1;32m[INFO]\033[0m $1"
+}
+
+log "Updating package list and installing prerequisites..."
+sudo apt-get update -y
+sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg lsb-release
+
+log "Adding Docker's official GPG key..."
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
-# Set up the stable Docker repository
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+log "Setting up the Docker repository..."
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Update package list again and install Docker
+log "Installing Docker Engine and Docker Compose..."
 sudo apt-get update -y
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
+# Install Docker Compose Plugin if not present
+if ! command -v docker-compose &> /dev/null; then
+  log "Installing Docker Compose (standalone binary)..."
+  COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)
+  sudo curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
+    -o /usr/local/bin/docker-compose
+  sudo chmod +x /usr/local/bin/docker-compose
+fi
 
-# Enable and start Docker service
+log "Enabling and starting Docker service..."
 sudo systemctl enable docker
 sudo systemctl start docker
 
-# Add current user to docker group
+log "Adding user '$USER' to docker group..."
 sudo usermod -aG docker $USER
-# Apply the new group membership
 newgrp docker
 
-# Verify Docker and Docker Compose installation
-docker --version
-docker-compose --version
+log "Creating Docker network 'zap-network' if it doesn't exist..."
+docker network inspect zap-network >/dev/null 2>&1 || docker network create zap-network
 
-docker network create proxy
+log "Creating acme.json file with proper permissions..."
+touch acme.json
+chmod 600 acme.json
 
-touch acme.json && chmod 600 acme.json
-
-# Run Docker Compose if docker-compose.yml exists
+log "Starting containers with Docker Compose..."
 if [ -f "docker-compose.yml" ]; then
-  docker-compose up -d
+  docker-compose up -d --build
 else
-  echo "docker-compose.yml not found. Please ensure it exists in the current directory."
-fi 
+  echo "[ERROR] docker-compose.yml not found!"
+  exit 1
+fi
+
+log "Setup complete. You can access your services now."

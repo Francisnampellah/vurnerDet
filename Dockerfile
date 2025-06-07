@@ -1,31 +1,35 @@
-FROM node:18-alpine
+# Base image
+FROM node:18-alpine AS base
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
-
 # Install dependencies
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Copy source code
+# Copy the rest of the app
 COPY . .
 
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build TypeScript
+# Build TypeScript project
 RUN npm run build
 
-# Create start script with debugging
-RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'echo "Starting database migrations..."' >> /app/start.sh && \
-    echo 'npx prisma migrate deploy' >> /app/start.sh && \
-    echo 'echo "Migrations completed. Starting application..."' >> /app/start.sh && \
-    echo 'npm start' >> /app/start.sh && \
-    chmod +x /app/start.sh
+# === Runtime container ===
+FROM node:18-alpine AS runtime
 
-EXPOSE 3000
+WORKDIR /app
 
-CMD ["sh", "/app/start.sh"] 
+# Copy node_modules and built code
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/dist ./dist
+COPY --from=base /app/prisma ./prisma
+COPY package.json ./
+
+# Environment variables (can be overridden in docker-compose)
+ENV NODE_ENV=production
+
+# Default command (can be overridden in docker-compose for worker)
+CMD ["node", "dist/index.js"]
