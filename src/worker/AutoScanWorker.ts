@@ -122,12 +122,19 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
       }
     );
 
-    if (!response.data || !response.data[0] || !response.data[0].generated_text) {
+    if (!response.data || !response.data[0]) {
       console.error('Invalid response format from Hugging Face API:', JSON.stringify(response.data));
       return alert.description;
     }
 
-    const translatedText = response.data[0].generated_text;
+    // Handle both possible response formats
+    const translatedText = response.data[0].summary_text || response.data[0].generated_text;
+    
+    if (!translatedText) {
+      console.error('No translation text found in response:', JSON.stringify(response.data));
+      return alert.description;
+    }
+
     console.log(`Successfully translated alert. Original: "${alert.description.substring(0, 100)}..." -> Translated: "${translatedText.substring(0, 100)}..."`);
     return translatedText;
   } catch (error: any) {
