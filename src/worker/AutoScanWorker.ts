@@ -112,7 +112,7 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
     const response = await axios.post(
       HUGGINGFACE_API_URL,
       {
-        inputs: `Translate this security alert into simple, non-technical language: ${alert.description}`,
+        inputs: `Rewrite this security alert in simple, everyday language that a non-technical person can understand. Avoid technical terms and explain the risk in plain English: ${alert.description}`,
       },
       {
         headers: {
@@ -133,6 +133,32 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
     if (!translatedText) {
       console.error('No translation text found in response:', JSON.stringify(response.data));
       return alert.description;
+    }
+
+    // If the translation is too similar to the original, try a different approach
+    if (translatedText.length > alert.description.length * 0.8 && 
+        translatedText.length < alert.description.length * 1.2) {
+      // Try a more direct prompt
+      const retryResponse = await axios.post(
+        HUGGINGFACE_API_URL,
+        {
+          inputs: `Explain this security issue to someone who knows nothing about computers: ${alert.description}`,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (retryResponse.data && retryResponse.data[0]) {
+        const retryText = retryResponse.data[0].summary_text || retryResponse.data[0].generated_text;
+        if (retryText && retryText !== translatedText) {
+          console.log(`Retry successful with different explanation. Original: "${alert.description.substring(0, 100)}..." -> New translation: "${retryText.substring(0, 100)}..."`);
+          return retryText;
+        }
+      }
     }
 
     console.log(`Successfully translated alert. Original: "${alert.description.substring(0, 100)}..." -> Translated: "${translatedText.substring(0, 100)}..."`);
