@@ -97,6 +97,17 @@ export const startFullScan = async (req: Request, res: Response) => {
     if (!url) return res.status(400).json({ error: 'URL is required' });
     if (!userId) return res.status(401).json({ error: 'User not authenticated' });
 
+    // Get metadata first to check if site is accessible
+    const metadata = await getTargetMetadata(url);
+    
+    // Check if IP address is null, indicating site is not accessible
+    if (!metadata.ipAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to initiate scan: Target site is not accessible or cannot be resolved'
+      });
+    }
+
     // Check if there's an existing scan for this URL by any user
     const existingScan = await prisma.scanSession.findFirst({ 
       where: { url }
@@ -146,7 +157,6 @@ export const startFullScan = async (req: Request, res: Response) => {
     }
 
     // If no existing scan, proceed with new scan
-    const metadata = await getTargetMetadata(url);
     // const technologies = await getDetectedTechnologies(url);
 
     const spiderResp = await axios.get(`${ZAP_API_BASE}/JSON/spider/action/scan/`, {
