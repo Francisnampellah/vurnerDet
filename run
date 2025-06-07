@@ -33,6 +33,10 @@ if ! command -v docker-compose &> /dev/null; then
   sudo chmod +x /usr/local/bin/docker-compose
 fi
 
+log "Creating acme.json file with proper permissions..."
+touch acme.json
+chmod 600 acme.json
+
 log "Enabling and starting Docker service..."
 sudo systemctl enable docker
 sudo systemctl start docker
@@ -44,9 +48,6 @@ newgrp docker
 log "Creating Docker network 'zap-network' if it doesn't exist..."
 docker network inspect zap-network >/dev/null 2>&1 || docker network create zap-network
 
-log "Creating acme.json file with proper permissions..."
-touch acme.json
-chmod 600 acme.json
 
 log "Starting containers with Docker Compose..."
 if [ -f "docker-compose.yml" ]; then
