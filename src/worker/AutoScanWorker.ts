@@ -8,7 +8,7 @@ dotenv.config();
 const prisma = new PrismaClient();
 const ZAP_API_BASE = 'http://zap:8080';
 const ZAP_API_KEY = '';
-const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API || "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" ;
+const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API || "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" ;
 const HUGGINGFACE_API_URL = 'https://api-inference.huggingface.co/models/facebook/bart-large-cnn';
 
 // Define interfaces for ZAP API responses
