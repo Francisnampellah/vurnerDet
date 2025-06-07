@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 const ZAP_API_BASE = 'http://zap:8080';
 const ZAP_API_KEY = '';
 const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API || "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" ;
-const HUGGINGFACE_API_URL = 'https://api-inference.huggingface.co/models/facebook/bart-large-cnn';
+const HUGGINGFACE_API_URL = 'https://router.huggingface.co/novita/v3/openai/chat/completions';
 
 // Define interfaces for ZAP API responses
 interface ZapSpiderStatusResponse {
@@ -112,7 +112,19 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
     const response = await axios.post(
       HUGGINGFACE_API_URL,
       {
-        inputs: `Rewrite this security alert in simple, everyday language that a non-technical person can understand. Avoid technical terms and explain the risk in plain English: ${alert.description}`,
+        model: "deepseek/deepseek-v3-0324",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant that explains security alerts in non-technical, plain English. Keep your explanations concise (maximum 100 words), clear, and properly formatted as plain text without markdown or special formatting."
+          },
+          {
+            role: "user",
+            content: `Please explain this security alert in everyday language so a non-technical person can understand it. Keep it under 100 words and use plain text formatting: ${alert.description}`
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 200
       },
       {
         headers: {
@@ -122,27 +134,35 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
       }
     );
 
-    if (!response.data || !response.data[0]) {
+    if (!response.data || !response.data.choices || !response.data.choices[0]?.message?.content) {
       console.error('Invalid response format from Hugging Face API:', JSON.stringify(response.data));
       return alert.description;
     }
 
-    // Handle both possible response formats
-    const translatedText = response.data[0].summary_text || response.data[0].generated_text;
+    const translatedText = response.data.choices[0].message.content.trim();
     
-    if (!translatedText) {
-      console.error('No translation text found in response:', JSON.stringify(response.data));
-      return alert.description;
-    }
-
     // If the translation is too similar to the original, try a different approach
     if (translatedText.length > alert.description.length * 0.8 && 
         translatedText.length < alert.description.length * 1.2) {
+      console.log('Translation too similar to original, trying alternative prompt...');
+      
       // Try a more direct prompt
       const retryResponse = await axios.post(
         HUGGINGFACE_API_URL,
         {
-          inputs: `Explain this security issue to someone who knows nothing about computers: ${alert.description}`,
+          model: "deepseek/deepseek-v3-0324",
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful assistant that explains security alerts in non-technical, plain English. Keep your explanations concise (maximum 100 words), clear, and properly formatted as plain text without markdown or special formatting."
+            },
+            {
+              role: "user",
+              content: `Explain this security issue to someone who knows nothing about computers. Use very simple language, avoid all technical terms, keep it under 100 words, and use plain text formatting: ${alert.description}`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 200
         },
         {
           headers: {
@@ -152,8 +172,8 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
         }
       );
 
-      if (retryResponse.data && retryResponse.data[0]) {
-        const retryText = retryResponse.data[0].summary_text || retryResponse.data[0].generated_text;
+      if (retryResponse.data?.choices?.[0]?.message?.content) {
+        const retryText = retryResponse.data.choices[0].message.content.trim();
         if (retryText && retryText !== translatedText) {
           console.log(`Retry successful with different explanation. Original: "${alert.description.substring(0, 100)}..." -> New translation: "${retryText.substring(0, 100)}..."`);
           return retryText;
