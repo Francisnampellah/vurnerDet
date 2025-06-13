@@ -10,6 +10,7 @@ import {
   // getSpiderResults,
   startFullScan,
   getAllScans,
+  deleteScan,
 } from '../controllers/zapController';
 
 const router = express.Router();
@@ -17,9 +18,9 @@ const router = express.Router();
 // Apply auth middleware to all routes 
 router.use(auth);
 
-
-router.post("/Fullscan",startFullScan as any)
-router.get("/getAllScans",getAllScans as any)
+router.post("/Fullscan", startFullScan as any);
+router.get("/getAllScans", getAllScans as any);
+router.delete("/scan/:id", deleteScan as any);
 
 // router.post('/spider/start', startSpiderScan as any);
 // router.get('/spider/status/:scanId', checkSpiderStatus as any);

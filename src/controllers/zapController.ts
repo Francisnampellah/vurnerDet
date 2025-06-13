@@ -256,6 +256,48 @@ export const getScanById = async (req: Request, res: Response) => {
   }
 };
 
+export const deleteScan = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = req.user?.id;
+
+  try {
+    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
+
+    // Find the scan and verify ownership
+    const scan = await prisma.scanSession.findFirst({
+      where: {
+        id: parseInt(id),
+        userId // Ensure the scan belongs to the user
+      }
+    });
+
+    if (!scan) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scan not found or access denied'
+      });
+    }
+
+    // Delete the scan
+    await prisma.scanSession.delete({
+      where: {
+        id: parseInt(id)
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Scan deleted successfully'
+    });
+  } catch (err: any) {
+    console.error('Delete scan error:', err.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete scan'
+    });
+  }
+};
+
 // import axios from 'axios';
 // import { Request, Response } from 'express';
 // import { PrismaClient } from '@prisma/client';
