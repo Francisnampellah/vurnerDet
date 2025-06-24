@@ -15,13 +15,17 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  password      String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  refreshTokens RefreshToken[]
-  scanSessions  ScanSession[]  // Add relation to ScanSession
+  id              String         @id @default(uuid())
+  email           String         @unique
+  password        String
+  name            String?
+  role            UserRole       @default(USER)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  refreshTokens   RefreshToken[]
+  scanSessions    ScanSession[]
+  authEmailOtp    String?
+  isEmailVerified Boolean        @default(false)
 }
 
 model RefreshToken {
@@ -37,24 +41,24 @@ model RefreshToken {
 }
 
 model ScanSession {
-  id                  Int       @id @default(autoincrement())
-  url                 String
+  id                 Int      @id @default(autoincrement())
+  url                String
   ipAddress          String?
-  startedAt          DateTime  @default(now())
+  startedAt          DateTime @default(now())
   webServer          String?
-  technologies       Json?     // Array of detected technologies
+  technologies       Json?
   authenticationMethod String?
   spiderId           String?
   activeId           String?
-  spiderStatus       Int       @default(0)
-  activeStatus       Int       @default(0)
+  spiderStatus       Int      @default(0)
+  activeStatus       Int      @default(0)
   spiderResults      Json?
   activeResults      Json?
-  translatedResults  Json?     // Translated results for non-technical personnel
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  userId             String    // Foreign key to User
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  translatedResults  Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -64,3 +68,8 @@ enum ScanStatus {
   COMPLETED
   FAILED
 }
+
+enum UserRole {
+  USER
+  ADMIN
+} 

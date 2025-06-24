@@ -11,6 +11,7 @@ const router = express_1.default.Router();
 router.use(auth_1.auth);
 router.post("/Fullscan", zapController_1.startFullScan);
 router.get("/getAllScans", zapController_1.getAllScans);
+router.delete("/scan/:id", zapController_1.deleteScan);
 // router.post('/spider/start', startSpiderScan as any);
 // router.get('/spider/status/:scanId', checkSpiderStatus as any);
 // router.get('/spider/results/:scanId', getSpiderResults as any);

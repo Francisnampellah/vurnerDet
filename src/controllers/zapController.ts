@@ -195,18 +195,25 @@ export const startFullScan = async (req: Request, res: Response) => {
 
 export const getAllScans = async (req: Request, res: Response) => {
   const userId = req.user?.id; // Get user ID from auth middleware
+  const userRole = req.user?.role; // Get user role from auth middleware
 
   try {
     if (!userId) return res.status(401).json({ error: 'User not authenticated' });
 
-    const scans = await prisma.scanSession.findMany({
-      where: {
-        userId // Only get scans for this user
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+    let scans;
+    
+    if (userRole === 'ADMIN') {
+      // Admin: get all scans
+      scans = await prisma.scanSession.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+    } else {
+      // Regular user: only get their scans
+      scans = await prisma.scanSession.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
 
     return res.status(200).json({
       success: true,

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getScanById = exports.getAllScans = exports.startFullScan = void 0;
+exports.deleteScan = exports.getScanById = exports.getAllScans = exports.startFullScan = void 0;
 const axios_1 = __importDefault(require("axios"));
 const client_1 = require("@prisma/client");
 const dns_1 = __importDefault(require("dns"));
@@ -74,6 +74,15 @@ const startFullScan = async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         if (!userId)
             return res.status(401).json({ error: 'User not authenticated' });
+        // Get metadata first to check if site is accessible
+        const metadata = await getTargetMetadata(url);
+        // Check if IP address is null, indicating site is not accessible
+        if (!metadata.ipAddress) {
+            return res.status(400).json({
+                success: false,
+                error: 'Failed to initiate scan: Target site is not accessible or cannot be resolved'
+            });
+        }
         // Check if there's an existing scan for this URL by any user
         const existingScan = await prisma.scanSession.findFirst({
             where: { url }
@@ -117,7 +126,6 @@ const startFullScan = async (req, res) => {
             });
         }
         // If no existing scan, proceed with new scan
-        const metadata = await getTargetMetadata(url);
         // const technologies = await getDetectedTechnologies(url);
         const spiderResp = await axios_1.default.get(`${ZAP_API_BASE}/JSON/spider/action/scan/`, {
             params: { url, apikey: ZAP_API_KEY },
@@ -153,17 +161,24 @@ const startFullScan = async (req, res) => {
 exports.startFullScan = startFullScan;
 const getAllScans = async (req, res) => {
     const userId = req.user?.id; // Get user ID from auth middleware
+    const userRole = req.user?.role; // Get user role from auth middleware
     try {
         if (!userId)
             return res.status(401).json({ error: 'User not authenticated' });
-        const scans = await prisma.scanSession.findMany({
-            where: {
-                userId // Only get scans for this user
-            },
-            orderBy: {
-                createdAt: 'desc'
-            }
-        });
+        let scans;
+        if (userRole === 'ADMIN') {
+            // Admin: get all scans
+            scans = await prisma.scanSession.findMany({
+                orderBy: { createdAt: 'desc' }
+            });
+        }
+        else {
+            // Regular user: only get their scans
+            scans = await prisma.scanSession.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' }
+            });
+        }
         return res.status(200).json({
             success: true,
             data: scans
@@ -211,6 +226,45 @@ const getScanById = async (req, res) => {
     }
 };
 exports.getScanById = getScanById;
+const deleteScan = async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    try {
+        if (!userId)
+            return res.status(401).json({ error: 'User not authenticated' });
+        // Find the scan and verify ownership
+        const scan = await prisma.scanSession.findFirst({
+            where: {
+                id: parseInt(id),
+                userId // Ensure the scan belongs to the user
+            }
+        });
+        if (!scan) {
+            return res.status(404).json({
+                success: false,
+                error: 'Scan not found or access denied'
+            });
+        }
+        // Delete the scan
+        await prisma.scanSession.delete({
+            where: {
+                id: parseInt(id)
+            }
+        });
+        return res.status(200).json({
+            success: true,
+            message: 'Scan deleted successfully'
+        });
+    }
+    catch (err) {
+        console.error('Delete scan error:', err.message);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to delete scan'
+        });
+    }
+};
+exports.deleteScan = deleteScan;
 // import axios from 'axios';
 // import { Request, Response } from 'express';
 // import { PrismaClient } from '@prisma/client';

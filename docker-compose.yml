@@ -35,7 +35,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
-    command: sh -c "npm install && npx prisma generate && npx ts-node src/worker/AutoScanWorker.ts"
+    command: sh -c "npm install && npx prisma migrate dev --name init && npx prisma generate && npx ts-node src/worker/AutoScanWorker.ts"
     volumes:
       - .:/app
     networks:
@@ -44,6 +44,8 @@ services:
   backend:
     build: .
     container_name: backend-container
+    dns:
+      - 8.8.8.8
     restart: always
     volumes:
       - .:/app:delegated

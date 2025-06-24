@@ -11,8 +11,8 @@ dotenv_1.default.config();
 const prisma = new client_1.PrismaClient();
 const ZAP_API_BASE = 'http://zap:8080';
 const ZAP_API_KEY = '';
-const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API || "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";
-const HUGGINGFACE_API_URL = 'https://api-inference.huggingface.co/models/facebook/bart-large-cnn';
+const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API || "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";
+const HUGGINGFACE_API_URL = 'https://router.huggingface.co/novita/v3/openai/chat/completions';
 // Enhanced configuration for API calls
 const API_CONFIG = {
     timeout: 30000, // 30 seconds timeout
@@ -85,18 +85,74 @@ async function waitForDatabase(retries = maxRetries) {
 }
 async function translateAlertToNonTechnical(alert) {
     try {
+        console.log(`Making translation request for alert: ${alert.name}`);
         const response = await axios_1.default.post(HUGGINGFACE_API_URL, {
-            inputs: `Translate this security alert into simple, non-technical language: ${alert.description}`,
+            model: "deepseek/deepseek-v3-0324",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a helpful assistant that explains security alerts in non-technical, plain English. Keep your explanations concise (maximum 100 words), clear, and properly formatted as plain text without markdown or special formatting."
+                },
+                {
+                    role: "user",
+                    content: `Please explain this security alert in everyday language so a non-technical person can understand it. Keep it under 100 words and use plain text formatting: ${alert.description}`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 200
         }, {
             headers: {
                 'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
                 'Content-Type': 'application/json',
             },
         });
-        return response.data[0].generated_text;
+        if (!response.data || !response.data.choices || !response.data.choices[0]?.message?.content) {
+            console.error('Invalid response format from Hugging Face API:', JSON.stringify(response.data));
+            return alert.description;
+        }
+        const translatedText = response.data.choices[0].message.content.trim();
+        // If the translation is too similar to the original, try a different approach
+        if (translatedText.length > alert.description.length * 0.8 &&
+            translatedText.length < alert.description.length * 1.2) {
+            console.log('Translation too similar to original, trying alternative prompt...');
+            // Try a more direct prompt
+            const retryResponse = await axios_1.default.post(HUGGINGFACE_API_URL, {
+                model: "deepseek/deepseek-v3-0324",
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a helpful assistant that explains security alerts in non-technical, plain English. Keep your explanations concise (maximum 100 words), clear, and properly formatted as plain text without markdown or special formatting."
+                    },
+                    {
+                        role: "user",
+                        content: `Explain this security issue to someone who knows nothing about computers. Use very simple language, avoid all technical terms, keep it under 100 words, and use plain text formatting: ${alert.description}`
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 200
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            if (retryResponse.data?.choices?.[0]?.message?.content) {
+                const retryText = retryResponse.data.choices[0].message.content.trim();
+                if (retryText && retryText !== translatedText) {
+                    console.log(`Retry successful with different explanation. Original: "${alert.description.substring(0, 100)}..." -> New translation: "${retryText.substring(0, 100)}..."`);
+                    return retryText;
+                }
+            }
+        }
+        console.log(`Successfully translated alert. Original: "${alert.description.substring(0, 100)}..." -> Translated: "${translatedText.substring(0, 100)}..."`);
+        return translatedText;
     }
     catch (error) {
-        console.error('Error translating alert:', error);
+        console.error('Error translating alert:', {
+            error: error.message,
+            response: error.response?.data,
+            alertName: alert.name
+        });
         return alert.description; // Return original description if translation fails
     }
 }
@@ -205,14 +261,16 @@ async function updateScans() {
                                     description: alert.description || '',
                                     urls: alert.urls || []
                                 };
-                                // Log an example of the first alert
-                                if (index === 0) {
-                                    console.log('Example of processed alert:', JSON.stringify(processedAlert, null, 2));
-                                }
+                                // Log the processed alert with translation
+                                console.log(`Processed alert ${index + 1} with translation:`, {
+                                    name: processedAlert.name,
+                                    hasTranslation: !!processedAlert.nonTechnicalDescription,
+                                    translationLength: processedAlert.nonTechnicalDescription?.length
+                                });
                                 return processedAlert;
                             }
                             catch (translationError) {
-                                console.error(`Error translating alert ${index + 1} for session ${id}:`, translationError);
+                                console.error(`Error processing alert ${index + 1} for session ${id}:`, translationError);
                                 return {
                                     ...alert,
                                     nonTechnicalDescription: alert.description, // Fallback to original description
@@ -229,6 +287,7 @@ async function updateScans() {
                             }
                         }));
                         if (alertsWithTranslations && alertsWithTranslations.length > 0) {
+                            console.log(`Saving ${alertsWithTranslations.length} alerts with translations to database...`);
                             await prisma.scanSession.update({
                                 where: { id },
                                 data: {

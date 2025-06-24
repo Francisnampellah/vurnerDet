@@ -9,6 +9,7 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const crypto_1 = __importDefault(require("crypto"));
 const auth_1 = require("../middleware/auth");
+const nodemailer_1 = __importDefault(require("nodemailer"));
 const router = express_1.default.Router();
 // Generate refresh token
 const generateRefreshToken = async (userId) => {
@@ -29,10 +30,29 @@ const generateAccessToken = (userId) => {
     const signOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN) || '1h' };
     return jsonwebtoken_1.default.sign({ id: userId }, process.env.JWT_SECRET || 'your-super-secret-jwt-key', signOptions);
 };
+// Helper to send OTP email
+const sendOtpEmail = async (email, otp) => {
+    // Configure your transporter (update with your SMTP credentials)
+    const transporter = nodemailer_1.default.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT),
+        secure: false, // true for 465, false for other ports
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+        },
+    });
+    await transporter.sendMail({
+        from: process.env.SMTP_FROM || 'no-reply@example.com',
+        to: email,
+        subject: 'Your Email Verification Code',
+        text: `Your verification code is: ${otp}`,
+    });
+};
 // Register new user
 const registerHandler = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, name } = req.body;
         // Check if user already exists
         const existingUser = await prisma_1.default.user.findUnique({
             where: { email }
@@ -44,20 +64,23 @@ const registerHandler = async (req, res) => {
         // Hash password
         const salt = await bcryptjs_1.default.genSalt(10);
         const hashedPassword = await bcryptjs_1.default.hash(password, salt);
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
         // Create new user
         const user = await prisma_1.default.user.create({
             data: {
                 email,
-                password: hashedPassword
+                password: hashedPassword,
+                name,
+                authEmailOtp: otp,
+                isEmailVerified: false
             }
         });
-        // Generate tokens
-        const accessToken = generateAccessToken(user.id);
-        const refreshToken = await generateRefreshToken(user.id);
+        // Send OTP email
+        await sendOtpEmail(email, otp);
         res.status(201).json({
-            user: { id: user.id, email: user.email },
-            accessToken,
-            refreshToken
+            user: { id: user.id, email: user.email, name: user.name },
+            message: 'Registration successful. Please check your email for the verification code.'
         });
     }
     catch (error) {
@@ -75,6 +98,11 @@ const loginHandler = async (req, res) => {
         });
         if (!user) {
             res.status(401).json({ error: 'Invalid login credentials' });
+            return;
+        }
+        // Enforce email verification
+        if (!user.isEmailVerified) {
+            res.status(401).json({ error: 'Please verify your email before logging in.' });
             return;
         }
         // Check password
@@ -153,10 +181,6 @@ const changePasswordHandler = async (req, res) => {
         const { currentPassword, newPassword } = req.body;
         const userId = req.user?.id;
         // Assuming user ID is attached by auth middleware
-        console.log("===============");
-        console.log(currentPassword, newPassword);
-        console.log("userId", userId);
-        console.log("===============");
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
@@ -206,6 +230,7 @@ const meHandler = async (req, res) => {
             select: {
                 id: true,
                 email: true,
+                name: true,
                 createdAt: true,
                 updatedAt: true
             }
@@ -220,10 +245,166 @@ const meHandler = async (req, res) => {
         res.status(400).json({ error: 'Failed to fetch user data' });
     }
 };
+// Email verification handler
+const verifyEmailHandler = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) {
+            res.status(400).json({ error: 'Email and OTP are required' });
+            return;
+        }
+        const user = await prisma_1.default.user.findUnique({ where: { email } });
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        if (user.isEmailVerified) {
+            res.status(400).json({ error: 'Email already verified' });
+            return;
+        }
+        if (user.authEmailOtp !== otp) {
+            res.status(400).json({ error: 'Invalid OTP' });
+            return;
+        }
+        await prisma_1.default.user.update({
+            where: { email },
+            data: {
+                isEmailVerified: true,
+                authEmailOtp: null
+            }
+        });
+        res.json({ message: 'Email verified successfully' });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Email verification failed' });
+    }
+};
+// Forgot password handler
+const forgotPasswordHandler = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            res.status(400).json({ error: 'Email is required' });
+            return;
+        }
+        const user = await prisma_1.default.user.findUnique({ where: { email } });
+        if (!user) {
+            // For security, do not reveal if user does not exist
+            res.json({ message: 'If the email exists, a reset code has been sent.' });
+            return;
+        }
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        await prisma_1.default.user.update({
+            where: { email },
+            data: { authEmailOtp: otp }
+        });
+        await sendOtpEmail(email, otp);
+        res.json({ message: 'If the email exists, a reset code has been sent.' });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Failed to process forgot password request' });
+    }
+};
+// Reset password handler
+const resetPasswordHandler = async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        if (!email || !otp || !newPassword) {
+            res.status(400).json({ error: 'Email, OTP, and new password are required' });
+            return;
+        }
+        const user = await prisma_1.default.user.findUnique({ where: { email } });
+        if (!user || user.authEmailOtp !== otp) {
+            res.status(400).json({ error: 'Invalid OTP or email' });
+            return;
+        }
+        // Hash new password
+        const salt = await bcryptjs_1.default.genSalt(10);
+        const hashedPassword = await bcryptjs_1.default.hash(newPassword, salt);
+        await prisma_1.default.user.update({
+            where: { email },
+            data: {
+                password: hashedPassword,
+                authEmailOtp: null
+            }
+        });
+        res.json({ message: 'Password reset successful' });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Failed to reset password' });
+    }
+};
+// Placeholder admin middleware (replace with real implementation)
+const adminAuth = (req, res, next) => {
+    if (req.user && req.user.role === 'ADMIN') {
+        next();
+    }
+    else {
+        res.status(403).json({ error: 'Admin access required' });
+    }
+};
+// Get all users (admin only)
+const getAllUsersHandler = async (req, res) => {
+    try {
+        const users = await prisma_1.default.user.findMany({
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                isEmailVerified: true,
+                createdAt: true,
+                updatedAt: true
+            }
+        });
+        res.json({ users });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Failed to fetch users' });
+    }
+};
+// Update user (admin only)
+const updateUserHandler = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { email, name, role, isEmailVerified } = req.body;
+        const user = await prisma_1.default.user.update({
+            where: { id },
+            data: {
+                email,
+                name,
+                role,
+                isEmailVerified
+            }
+        });
+        res.json({ user });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Failed to update user' });
+    }
+};
+// Delete user (admin only)
+const deleteUserHandler = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await prisma_1.default.user.delete({ where: { id } });
+        res.json({ message: 'User deleted successfully' });
+    }
+    catch (error) {
+        res.status(400).json({ error: 'Failed to delete user' });
+    }
+};
 router.post('/register', registerHandler);
 router.post('/login', loginHandler);
 router.post('/refresh', refreshTokenHandler);
 router.post('/logout', logoutHandler);
 router.post('/change-password', auth_1.auth, changePasswordHandler);
 router.get('/me', auth_1.auth, meHandler);
+router.post('/verify-email', verifyEmailHandler);
+router.post('/forgot-password', forgotPasswordHandler);
+router.post('/reset-password', resetPasswordHandler);
+router.get('/users', adminAuth, getAllUsersHandler);
+router.put('/users/:id', adminAuth, updateUserHandler);
+router.delete('/users/:id', adminAuth, deleteUserHandler);
 exports.default = router;
