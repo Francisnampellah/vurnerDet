@@ -135,7 +135,7 @@ const loginHandler: RequestHandler = async (req: Request, res: Response): Promis
     const refreshToken = await generateRefreshToken(user.id);
 
     res.json({ 
-      user: { id: user.id, email: user.email , user.isEmailVerified},
+      user: { id: user.id, email: user.email,verified:user.isEmailVerified },
       accessToken,
       refreshToken 
     });

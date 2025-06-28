@@ -115,7 +115,7 @@ const loginHandler = async (req, res) => {
         const accessToken = generateAccessToken(user.id);
         const refreshToken = await generateRefreshToken(user.id);
         res.json({
-            user: { id: user.id, email: user.email },
+            user: { id: user.id, email: user.email, verified: user.isEmailVerified },
             accessToken,
             refreshToken
         });
@@ -279,6 +279,36 @@ const verifyEmailHandler = async (req, res) => {
         res.status(400).json({ error: 'Email verification failed' });
     }
 };
+const resendOtpHandler = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            res.status(400).json({ error: 'Email is required' });
+            return;
+        }
+        const user = await prisma_1.default.user.findUnique({ where: { email } });
+        if (!user) {
+            // To prevent user enumeration, send a generic success response
+            res.json({ message: 'If a matching account exists, a new OTP has been sent.' });
+            return;
+        }
+        if (user.isEmailVerified) {
+            res.status(400).json({ error: 'Email is already verified.' });
+            return;
+        }
+        // Generate a new OTP and send it
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        await prisma_1.default.user.update({
+            where: { email },
+            data: { authEmailOtp: otp },
+        });
+        await sendOtpEmail(email, otp);
+        res.json({ message: 'A new OTP has been sent to your email.' });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to resend OTP.' });
+    }
+};
 // Forgot password handler
 const forgotPasswordHandler = async (req, res) => {
     try {
@@ -402,6 +432,7 @@ router.post('/logout', logoutHandler);
 router.post('/change-password', auth_1.auth, changePasswordHandler);
 router.get('/me', auth_1.auth, meHandler);
 router.post('/verify-email', verifyEmailHandler);
+router.post('/resend-otp', resendOtpHandler);
 router.post('/forgot-password', forgotPasswordHandler);
 router.post('/reset-password', resetPasswordHandler);
 router.get('/users', adminAuth, getAllUsersHandler);
