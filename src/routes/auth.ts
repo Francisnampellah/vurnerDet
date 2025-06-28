@@ -135,7 +135,7 @@ const loginHandler: RequestHandler = async (req: Request, res: Response): Promis
     const refreshToken = await generateRefreshToken(user.id);
 
     res.json({ 
-      user: { id: user.id, email: user.email },
+      user: { id: user.id, email: user.email , user.isEmailVerified},
       accessToken,
       refreshToken 
     });
@@ -324,6 +324,41 @@ const verifyEmailHandler: RequestHandler = async (req: Request, res: Response): 
   }
 };
 
+const resendOtpHandler: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // To prevent user enumeration, send a generic success response
+      res.json({ message: 'If a matching account exists, a new OTP has been sent.' });
+      return;
+    }
+
+    if (user.isEmailVerified) {
+      res.status(400).json({ error: 'Email is already verified.' });
+      return;
+    }
+
+    // Generate a new OTP and send it
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await prisma.user.update({
+      where: { email },
+      data: { authEmailOtp: otp },
+    });
+
+    await sendOtpEmail(email, otp);
+    res.json({ message: 'A new OTP has been sent to your email.' });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to resend OTP.' });
+  }
+};
+
 // Forgot password handler
 const forgotPasswordHandler: RequestHandler = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -448,6 +483,7 @@ router.post('/logout', logoutHandler);
 router.post('/change-password', auth, changePasswordHandler);
 router.get('/me', auth, meHandler);
 router.post('/verify-email', verifyEmailHandler);
+router.post('/resend-otp', resendOtpHandler);
 router.post('/forgot-password', forgotPasswordHandler);
 router.post('/reset-password', resetPasswordHandler);
 router.get('/users', adminAuth, getAllUsersHandler);
