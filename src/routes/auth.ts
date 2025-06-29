@@ -554,14 +554,34 @@ const forgotPasswordHandler: RequestHandler = async (req: Request, res: Response
       res.json({ message: 'If the email exists, a reset code has been sent.' });
       return;
     }
+    
     // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await prisma.user.update({
       where: { email },
       data: { authEmailOtp: otp }
     });
-    await sendOtpEmail(email, otp);
-    res.json({ message: 'If the email exists, a reset code has been sent.' });
+    
+    // Try to send OTP email, but don't fail if it doesn't work
+    let emailSent = false;
+    let emailError = null;
+    
+    try {
+      await sendOtpEmail(email, otp);
+      emailSent = true;
+    } catch (error) {
+      console.error('Email sending failed for forgot password:', error);
+      emailError = error instanceof Error ? error.message : 'Unknown email error';
+    }
+    
+    res.json({ 
+      message: emailSent 
+        ? 'If the email exists, a reset code has been sent.' 
+        : 'Password reset initiated. Email sending failed. Please use the OTP provided below.',
+      otp: emailSent ? undefined : otp, // Only return OTP if email failed
+      emailSent,
+      emailError
+    });
   } catch (error) {
     res.status(400).json({ error: 'Failed to process forgot password request' });
   }
