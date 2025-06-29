@@ -231,11 +231,20 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
         }
       });
 
-      // Try to send OTP email - if this fails, the entire transaction will be rolled back
-      await sendOtpEmail(email, otp);
-
       return { user, business };
     });
+
+    // Try to send OTP email, but don't fail registration if it fails
+    let emailSent = false;
+    let emailError = null;
+    
+    try {
+      await sendOtpEmail(email, otp);
+      emailSent = true;
+    } catch (error) {
+      console.error('Email sending failed but registration continued:', error);
+      emailError = error instanceof Error ? error.message : 'Unknown email error';
+    }
 
     res.status(201).json({
       user: { 
@@ -245,25 +254,19 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
         role: result.user.role,
         business: result.user.business
       },
+      otp: emailSent ? undefined : otp, // Only return OTP if email failed
+      emailSent,
+      emailError,
       message: isFirstUser 
-        ? 'Registration successful. You are the first user and have been assigned ADMIN role. Please check your email for the verification code.'
-        : 'Registration successful. Please check your email for the verification code.'
+        ? `Registration successful. You are the first user and have been assigned ADMIN role. ${emailSent ? 'Please check your email for the verification code.' : 'Email sending failed. Please use the OTP provided below.'}`
+        : `Registration successful. ${emailSent ? 'Please check your email for the verification code.' : 'Email sending failed. Please use the OTP provided below.'}`
     });
   } catch (error) {
     console.error('Registration error:', error);
-    
-    // Check if it's an email sending error
-    if (error instanceof Error && error.message.includes('getaddrinfo EAI_AGAIN')) {
-      res.status(500).json({ 
-        error: 'Email service temporarily unavailable. Please try again later.',
-        details: 'Unable to send verification email due to network issues.'
-      });
-    } else {
-      res.status(400).json({ 
-        error: 'Invalid registration data', 
-        details: error instanceof Error ? error.message : 'Unknown error' 
-      });
-    }
+    res.status(400).json({ 
+      error: 'Invalid registration data', 
+      details: error instanceof Error ? error.message : 'Unknown error' 
+    });
   }
 };
 
