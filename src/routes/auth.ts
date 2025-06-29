@@ -741,4 +741,14 @@ router.get('/users', auth, adminAuth, getAllUsersHandler);
 router.put('/users/:id', auth, adminAuth, updateUserHandler);
 router.delete('/users/:id', auth, adminAuth, deleteUserHandler);
 
+// Test endpoint for network connectivity (remove in production)
+router.get('/test-network', async (req: Request, res: Response) => {
+  try {
+    await testNetworkConnectivity();
+    res.json({ message: 'Network test completed. Check server logs for details.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Network test failed', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
 export default router; 
