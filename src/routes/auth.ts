@@ -46,12 +46,11 @@ const testInternetConnectivity = async (): Promise<boolean> => {
 const testSMTPConnectivity = async (): Promise<boolean> => {
   return new Promise((resolve) => {
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: false,
+      host: "live.smtp.mailtrap.io",
+      port: 587,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: "api",
+        pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
       },
       connectionTimeout: 5000, // 5 seconds
       greetingTimeout: 5000,
@@ -83,11 +82,11 @@ const testNetworkConnectivity = async (): Promise<void> => {
   console.log(`SMTP connectivity: ${smtpOk ? '✅ OK' : '❌ FAILED'}`);
   
   // Log environment variables (without sensitive data)
-  console.log('SMTP Configuration:');
-  console.log(`- Host: ${process.env.SMTP_HOST || 'NOT SET'}`);
-  console.log(`- Port: ${process.env.SMTP_PORT || 'NOT SET'}`);
-  console.log(`- User: ${process.env.SMTP_USER ? 'SET' : 'NOT SET'}`);
-  console.log(`- Pass: ${process.env.SMTP_PASS ? 'SET' : 'NOT SET'}`);
+  console.log('Mailtrap Configuration:');
+  console.log(`- Host: live.smtp.mailtrap.io`);
+  console.log(`- Port: 587`);
+  console.log(`- User: api`);
+  console.log(`- API Token: ${process.env.MAILTRAP_API_TOKEN ? 'SET' : 'NOT SET'}`);
   console.log(`- From: ${process.env.SMTP_FROM || 'NOT SET'}`);
   console.log('=== End Network Test ===');
 };
@@ -136,12 +135,11 @@ const sendOtpEmail = async (email: string, otp: string) => {
 
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: false, // true for 465, false for other ports
+      host: "live.smtp.mailtrap.io",
+      port: 587,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: "api",
+        pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
       },
       // Add timeout configurations to prevent hanging connections
       connectionTimeout: 10000, // 10 seconds
@@ -150,7 +148,7 @@ const sendOtpEmail = async (email: string, otp: string) => {
     });
 
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'no-reply@example.com',
+      from: process.env.SMTP_FROM || 'noreply@yourdomain.com',
       to: email,
       subject: 'Your Email Verification Code',
       text: `Your verification code is: ${otp}`,
