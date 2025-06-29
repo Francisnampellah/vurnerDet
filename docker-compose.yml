@@ -27,17 +27,34 @@ services:
   worker:
     build: .
     container_name: scan_worker
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    restart: unless-stopped
     depends_on:
-      - postgres
-      - zap
-      - backend
+      postgres:
+        condition: service_healthy
+      zap:
+        condition: service_started
     env_file:
       - .env
     environment:
       - DATABASE_URL=postgresql://novus:Juan2010@postgres:5432/vurnerDB
-    command: sh -c "npm install && npx prisma migrate dev --name init && npx prisma generate && npx ts-node src/worker/AutoScanWorker.ts"
+      - NODE_ENV=development
+    command: |
+      sh -c "
+        echo 'Installing dependencies...' &&
+        npm install --no-optional &&
+        echo 'Running database migrations...' &&
+        npx prisma migrate deploy &&
+        echo 'Generating Prisma client...' &&
+        npx prisma generate &&
+        echo 'Starting AutoScanWorker...' &&
+        npx ts-node src/worker/AutoScanWorker.ts
+      "
     volumes:
       - .:/app
+      - worker_node_modules:/app/node_modules
     networks:
       - zap-network
 
@@ -95,12 +112,16 @@ services:
   zap:
     image: zaproxy/zap-stable
     user: zap
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - 8080:8080
     command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.*
       -config api.addrs.addr.regex=true -config api.disablekey=true
     networks:
       - zap-network
+
 
 networks:
   zap-network:
@@ -109,3 +130,4 @@ networks:
 
 volumes:
   backend_node_modules:
+  worker_node_modules:

@@ -59,7 +59,7 @@ const sendOtpEmail = async (email: string, otp: string) => {
 // Register new user
 const registerHandler: RequestHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, name, businessName, businessPhone, businessDescription, businessLocation } = req.body;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -71,6 +71,10 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
       return;
     }
 
+    // Check if this is the first user (make them admin)
+    const userCount = await prisma.user.count();
+    const isFirstUser = userCount === 0;
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -78,14 +82,29 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
     // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Create new user
+    // Create business first
+    const business = await prisma.business.create({
+      data: {
+        name: businessName || `${name}'s Business`,
+        phone: businessPhone || '',
+        description: businessDescription || '',
+        location: businessLocation || ''
+      }
+    });
+
+    // Create new user with business association
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
         authEmailOtp: otp,
-        isEmailVerified: false
+        isEmailVerified: false,
+        role: isFirstUser ? 'ADMIN' : 'USER', // First user becomes admin
+        businessId: business.id
+      },
+      include: {
+        business: true
       }
     });
 
@@ -93,8 +112,16 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
     await sendOtpEmail(email, otp);
 
     res.status(201).json({
-      user: { id: user.id, email: user.email, name: user.name},
-      message: 'Registration successful. Please check your email for the verification code.'
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role,
+        business: user.business
+      },
+      message: isFirstUser 
+        ? 'Registration successful. You are the first user and have been assigned ADMIN role. Please check your email for the verification code.'
+        : 'Registration successful. Please check your email for the verification code.'
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -135,7 +162,7 @@ const loginHandler: RequestHandler = async (req: Request, res: Response): Promis
     const refreshToken = await generateRefreshToken(user.id);
 
     res.json({ 
-      user: { id: user.id, email: user.email,verified:user.isEmailVerified },
+      user: { id: user.id, email: user.email,verified:user.isEmailVerified,role:user.role },
       accessToken,
       refreshToken 
     });
@@ -271,8 +298,21 @@ const meHandler: RequestHandler = async (req: Request, res: Response): Promise<v
         id: true,
         email: true,
         name: true,
+        role: true,
+        isEmailVerified: true,
         createdAt: true,
-        updatedAt: true
+        updatedAt: true,
+        business: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            description: true,
+            location: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        }
       }
     });
 
@@ -476,18 +516,89 @@ const deleteUserHandler: RequestHandler = async (req: Request, res: Response): P
   }
 };
 
+// Update profile handler
+const updateProfileHandler: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const { name, businessName, businessPhone, businessDescription, businessLocation } = req.body;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Get user with business
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { business: true }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Update user and business information
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: name || user.name,
+        business: {
+          update: {
+            name: businessName || user.business?.name,
+            phone: businessPhone || user.business?.phone,
+            description: businessDescription || user.business?.description,
+            location: businessLocation || user.business?.location
+          }
+        }
+      },
+      include: {
+        business: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            description: true,
+            location: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        }
+      }
+    });
+
+    res.json({ 
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        isEmailVerified: updatedUser.isEmailVerified,
+        createdAt: updatedUser.createdAt,
+        updatedAt: updatedUser.updatedAt,
+        business: updatedUser.business
+      },
+      message: 'Profile updated successfully' 
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(400).json({ error: 'Failed to update profile', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+};
+
 router.post('/register', registerHandler);
 router.post('/login', loginHandler);
 router.post('/refresh', refreshTokenHandler);
 router.post('/logout', logoutHandler);
 router.post('/change-password', auth, changePasswordHandler);
 router.get('/me', auth, meHandler);
+router.put('/profile', auth, updateProfileHandler);
 router.post('/verify-email', verifyEmailHandler);
 router.post('/resend-otp', resendOtpHandler);
 router.post('/forgot-password', forgotPasswordHandler);
 router.post('/reset-password', resetPasswordHandler);
-router.get('/users', adminAuth, getAllUsersHandler);
-router.put('/users/:id', adminAuth, updateUserHandler);
-router.delete('/users/:id', adminAuth, deleteUserHandler);
+router.get('/users', auth, adminAuth, getAllUsersHandler);
+router.put('/users/:id', auth, adminAuth, updateUserHandler);
+router.delete('/users/:id', auth, adminAuth, deleteUserHandler);
 
 export default router; 

@@ -8,6 +8,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const cors_1 = __importDefault(require("cors"));
 const client_1 = require("@prisma/client");
 const auth_1 = __importDefault(require("./routes/auth"));
+const business_1 = __importDefault(require("./routes/business"));
 const auth_2 = require("./middleware/auth");
 const zap_1 = __importDefault(require("./routes/zap"));
 // Load environment variables
@@ -21,6 +22,7 @@ app.use((0, cors_1.default)()); // Enable CORS for all routes
 app.use(express_1.default.json());
 // Routes
 app.use('/api/auth', auth_1.default);
+app.use('/api/business', business_1.default);
 app.use('/api/scan', zap_1.default);
 // Protected route example
 app.get('/api/protected', auth_2.auth, (_req, res) => {

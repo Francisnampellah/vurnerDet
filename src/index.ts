@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
+import businessRoutes from './routes/business';
 import { auth } from './middleware/auth';
 import scanRoutes from "./routes/zap"
 
@@ -21,6 +22,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/business', businessRoutes);
 app.use('/api/scan', scanRoutes);
 
 // Protected route example
