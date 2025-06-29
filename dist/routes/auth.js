@@ -69,39 +69,43 @@ const registerHandler = async (req, res) => {
         const hashedPassword = await bcryptjs_1.default.hash(password, salt);
         // Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        // Create business first
-        const business = await prisma_1.default.business.create({
-            data: {
-                name: businessName || `${name}'s Business`,
-                phone: businessPhone || '',
-                description: businessDescription || '',
-                location: businessLocation || ''
-            }
+        // Use transaction to ensure atomicity
+        const result = await prisma_1.default.$transaction(async (tx) => {
+            // Create business first
+            const business = await tx.business.create({
+                data: {
+                    name: businessName || `${name}'s Business`,
+                    phone: businessPhone || '',
+                    description: businessDescription || '',
+                    location: businessLocation || ''
+                }
+            });
+            // Create new user with business association
+            const user = await tx.user.create({
+                data: {
+                    email,
+                    password: hashedPassword,
+                    name,
+                    authEmailOtp: otp,
+                    isEmailVerified: false,
+                    role: isFirstUser ? 'ADMIN' : 'USER', // First user becomes admin
+                    businessId: business.id
+                },
+                include: {
+                    business: true
+                }
+            });
+            // Try to send OTP email - if this fails, the entire transaction will be rolled back
+            await sendOtpEmail(email, otp);
+            return { user, business };
         });
-        // Create new user with business association
-        const user = await prisma_1.default.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                name,
-                authEmailOtp: otp,
-                isEmailVerified: false,
-                role: isFirstUser ? 'ADMIN' : 'USER', // First user becomes admin
-                businessId: business.id
-            },
-            include: {
-                business: true
-            }
-        });
-        // Send OTP email
-        await sendOtpEmail(email, otp);
         res.status(201).json({
             user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role,
-                business: user.business
+                id: result.user.id,
+                email: result.user.email,
+                name: result.user.name,
+                role: result.user.role,
+                business: result.user.business
             },
             message: isFirstUser
                 ? 'Registration successful. You are the first user and have been assigned ADMIN role. Please check your email for the verification code.'
@@ -110,7 +114,19 @@ const registerHandler = async (req, res) => {
     }
     catch (error) {
         console.error('Registration error:', error);
-        res.status(400).json({ error: 'Invalid registration data', details: error instanceof Error ? error.message : 'Unknown error' });
+        // Check if it's an email sending error
+        if (error instanceof Error && error.message.includes('getaddrinfo EAI_AGAIN')) {
+            res.status(500).json({
+                error: 'Email service temporarily unavailable. Please try again later.',
+                details: 'Unable to send verification email due to network issues.'
+            });
+        }
+        else {
+            res.status(400).json({
+                error: 'Invalid registration data',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
     }
 };
 // Login user
