@@ -38,6 +38,15 @@ const generateAccessToken = (userId: string): string => {
 // Helper to send OTP email
 const sendOtpEmail = async (email: string, otp: string) => {
   // Configure your transporter (update with your SMTP credentials)
+
+  console.log("++++++++++++++++++++++++")
+
+  console.log(email)
+
+  console.log(otp)
+
+  console.log("++++++++++++++++++++++++")
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
