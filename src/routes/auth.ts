@@ -5,8 +5,92 @@ import prisma from '../lib/prisma';
 import crypto from 'crypto';
 import { auth } from '../middleware/auth';
 import nodemailer from 'nodemailer';
+import https from 'https';
+import { URL } from 'url';
 
 const router: Router = express.Router();
+
+// Test internet connectivity
+const testInternetConnectivity = async (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const testUrl = 'https://www.google.com';
+    const url = new URL(testUrl);
+    
+    const req = https.request({
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname,
+      method: 'GET',
+      timeout: 10000, // 10 seconds timeout
+    }, (res) => {
+      console.log(`Internet connectivity test: ${res.statusCode} - ${testUrl}`);
+      resolve(true);
+    });
+
+    req.on('error', (error) => {
+      console.error('Internet connectivity test failed:', error.message);
+      resolve(false);
+    });
+
+    req.on('timeout', () => {
+      console.error('Internet connectivity test timed out');
+      req.destroy();
+      resolve(false);
+    });
+
+    req.end();
+  });
+};
+
+// Test SMTP connectivity
+const testSMTPConnectivity = async (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      connectionTimeout: 5000, // 5 seconds
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+    });
+
+    transporter.verify((error, success) => {
+      if (error) {
+        console.error('SMTP connectivity test failed:', error.message);
+        resolve(false);
+      } else {
+        console.log('SMTP connectivity test: Success - Server is ready to take our messages');
+        resolve(true);
+      }
+    });
+  });
+};
+
+// Test network connectivity
+const testNetworkConnectivity = async (): Promise<void> => {
+  console.log('=== Network Connectivity Test ===');
+  
+  // Test internet connectivity
+  const internetOk = await testInternetConnectivity();
+  console.log(`Internet connectivity: ${internetOk ? '✅ OK' : '❌ FAILED'}`);
+  
+  // Test SMTP connectivity
+  const smtpOk = await testSMTPConnectivity();
+  console.log(`SMTP connectivity: ${smtpOk ? '✅ OK' : '❌ FAILED'}`);
+  
+  // Log environment variables (without sensitive data)
+  console.log('SMTP Configuration:');
+  console.log(`- Host: ${process.env.SMTP_HOST || 'NOT SET'}`);
+  console.log(`- Port: ${process.env.SMTP_PORT || 'NOT SET'}`);
+  console.log(`- User: ${process.env.SMTP_USER ? 'SET' : 'NOT SET'}`);
+  console.log(`- Pass: ${process.env.SMTP_PASS ? 'SET' : 'NOT SET'}`);
+  console.log(`- From: ${process.env.SMTP_FROM || 'NOT SET'}`);
+  console.log('=== End Network Test ===');
+};
 
 // Generate refresh token
 const generateRefreshToken = async (userId: string): Promise<string> => {
@@ -47,22 +131,52 @@ const sendOtpEmail = async (email: string, otp: string) => {
 
   console.log("++++++++++++++++++++++++")
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+  // Run network connectivity tests first
+  await testNetworkConnectivity();
 
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || 'no-reply@example.com',
-    to: email,
-    subject: 'Your Email Verification Code',
-    text: `Your verification code is: ${otp}`,
-  });
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      // Add timeout configurations to prevent hanging connections
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,   // 10 seconds
+      socketTimeout: 10000,     // 10 seconds
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'no-reply@example.com',
+      to: email,
+      subject: 'Your Email Verification Code',
+      text: `Your verification code is: ${otp}`,
+    });
+  } catch (error) {
+    console.error('Email sending error:', error);
+    
+    // Handle specific email errors
+    if (error instanceof Error) {
+      if (error.message.includes('getaddrinfo EAI_AGAIN')) {
+        throw new Error('Email service temporarily unavailable due to network issues. Please try again later.');
+      } else if (error.message.includes('Invalid login')) {
+        throw new Error('Email service authentication failed. Please check SMTP credentials.');
+      } else if (error.message.includes('ECONNREFUSED')) {
+        throw new Error('Email service connection refused. Please check SMTP configuration.');
+      } else if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.message.includes('Connection timeout')) {
+        throw new Error('Email service connection timed out. Please try again later.');
+      } else if (error.message.includes('ENOTFOUND')) {
+        throw new Error('Email service host not found. Please check SMTP configuration.');
+      } else {
+        throw new Error(`Email sending failed: ${error.message}`);
+      }
+    } else {
+      throw new Error('Email sending failed due to an unknown error.');
+    }
+  }
 };
 
 // Register new user
