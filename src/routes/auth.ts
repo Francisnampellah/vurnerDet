@@ -47,6 +47,10 @@ const sendOtpEmail = async (email: string, otp: string) => {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      // Add timeout configurations to prevent hanging connections
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,   // 10 seconds
+      socketTimeout: 10000,     // 10 seconds
     });
 
     await transporter.sendMail({
@@ -66,8 +70,10 @@ const sendOtpEmail = async (email: string, otp: string) => {
         throw new Error('Email service authentication failed. Please check SMTP credentials.');
       } else if (error.message.includes('ECONNREFUSED')) {
         throw new Error('Email service connection refused. Please check SMTP configuration.');
-      } else if (error.message.includes('timeout')) {
-        throw new Error('Email service request timed out. Please try again later.');
+      } else if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.message.includes('Connection timeout')) {
+        throw new Error('Email service connection timed out. Please try again later.');
+      } else if (error.message.includes('ENOTFOUND')) {
+        throw new Error('Email service host not found. Please check SMTP configuration.');
       } else {
         throw new Error(`Email sending failed: ${error.message}`);
       }
