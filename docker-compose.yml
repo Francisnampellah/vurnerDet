@@ -112,16 +112,21 @@ services:
   zap:
     image: zaproxy/zap-stable
     user: zap
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
     ports:
       - 8080:8080
     command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.*
       -config api.addrs.addr.regex=true -config api.disablekey=true
     networks:
       - zap-network
-
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/JSON/core/view/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 networks:
   zap-network:
