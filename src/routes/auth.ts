@@ -4,12 +4,9 @@ import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import crypto from 'crypto';
 import { auth } from '../middleware/auth';
-import sgMail from '@sendgrid/mail';
+import nodemailer from 'nodemailer';
 
 const router: Router = express.Router();
-
-// Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY || '');
 
 // Generate refresh token
 const generateRefreshToken = async (userId: string): Promise<string> => {
@@ -40,47 +37,23 @@ const generateAccessToken = (userId: string): string => {
 
 // Helper to send OTP email
 const sendOtpEmail = async (email: string, otp: string) => {
-  try {
-    const msg = {
-      to: email,
-      from: process.env.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com',
-      subject: 'Your Email Verification Code',
-      text: `Your verification code is: ${otp}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Email Verification</h2>
-          <p>Your verification code is:</p>
-          <div style="background-color: #f4f4f4; padding: 20px; text-align: center; border-radius: 5px;">
-            <h1 style="color: #007bff; font-size: 32px; margin: 0;">${otp}</h1>
-          </div>
-          <p style="color: #666; font-size: 14px; margin-top: 20px;">
-            This code will expire in 10 minutes. If you didn't request this code, please ignore this email.
-          </p>
-        </div>
-      `,
-    };
+  // Configure your transporter (update with your SMTP credentials)
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
 
-    await sgMail.send(msg);
-  } catch (error) {
-    console.error('Email sending error:', error);
-    
-    // Handle specific SendGrid errors
-    if (error instanceof Error) {
-      if (error.message.includes('Unauthorized')) {
-        throw new Error('Email service authentication failed. Please check API key.');
-      } else if (error.message.includes('Forbidden')) {
-        throw new Error('Email service access denied. Please check API permissions.');
-      } else if (error.message.includes('Bad Request')) {
-        throw new Error('Invalid email configuration. Please check sender email.');
-      } else if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
-        throw new Error('Email service connection timed out. Please try again later.');
-      } else {
-        throw new Error(`Email sending failed: ${error.message}`);
-      }
-    } else {
-      throw new Error('Email sending failed due to an unknown error.');
-    }
-  }
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || 'no-reply@example.com',
+    to: email,
+    subject: 'Your Email Verification Code',
+    text: `Your verification code is: ${otp}`,
+  });
 };
 
 // Register new user
