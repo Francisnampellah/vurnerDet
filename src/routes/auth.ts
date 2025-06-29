@@ -37,23 +37,44 @@ const generateAccessToken = (userId: string): string => {
 
 // Helper to send OTP email
 const sendOtpEmail = async (email: string, otp: string) => {
-  // Configure your transporter (update with your SMTP credentials)
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+  try {
+    // Configure your transporter (update with your SMTP credentials)
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
 
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || 'no-reply@example.com',
-    to: email,
-    subject: 'Your Email Verification Code',
-    text: `Your verification code is: ${otp}`,
-  });
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'no-reply@example.com',
+      to: email,
+      subject: 'Your Email Verification Code',
+      text: `Your verification code is: ${otp}`,
+    });
+  } catch (error) {
+    console.error('Email sending error:', error);
+    
+    // Handle specific email errors
+    if (error instanceof Error) {
+      if (error.message.includes('getaddrinfo EAI_AGAIN')) {
+        throw new Error('Email service temporarily unavailable due to network issues. Please try again later.');
+      } else if (error.message.includes('Invalid login')) {
+        throw new Error('Email service authentication failed. Please check SMTP credentials.');
+      } else if (error.message.includes('ECONNREFUSED')) {
+        throw new Error('Email service connection refused. Please check SMTP configuration.');
+      } else if (error.message.includes('timeout')) {
+        throw new Error('Email service request timed out. Please try again later.');
+      } else {
+        throw new Error(`Email sending failed: ${error.message}`);
+      }
+    } else {
+      throw new Error('Email sending failed due to an unknown error.');
+    }
+  }
 };
 
 // Register new user
