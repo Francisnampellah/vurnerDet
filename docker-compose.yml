@@ -63,7 +63,7 @@ services:
     container_name: backend-container
     dns:
       - 8.8.8.8
-      - 8.8.4.4
+      - 1.1.1.1
     restart: always
     volumes:
       - .:/app:delegated
