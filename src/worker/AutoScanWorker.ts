@@ -360,11 +360,11 @@ async function updateScans() {
 
       try {
         // Check if target is reachable before proceeding
-        const isReachable = await isTargetReachable(url);
-        if (!isReachable) {
-          console.error(`❌ Target ${url} is not reachable, skipping scan session ${id}`);
-          continue;
-        }
+        // const isReachable = await isTargetReachable(url);
+        // if (!isReachable) {
+        //   console.error(`❌ Target ${url} is not reachable, skipping scan session ${id}`);
+        //   continue;
+        // }
 
         // Update Spider Status
         if (spiderId && spiderStatus < 100) {
@@ -544,6 +544,76 @@ async function updateScans() {
           spiderId,
           activeId
         });
+      }
+
+      // Failsafe: If activeStatus is 100 but activeResults is null or empty, fetch and save results
+      try {
+        if (activeId && activeStatus === 100 && (!session.activeResults || (Array.isArray(session.activeResults) && session.activeResults.length === 0))) {
+          console.log(`🛡️ Failsafe: activeStatus is 100 but activeResults is null/empty for session ${id}. Fetching alerts...`);
+          const alertsResp = await makeZapApiCall<ZapAlertsResponse>('/JSON/core/view/alerts/', { baseurl: url });
+          if (alertsResp.alerts) {
+            // Group and translate alerts as in the main logic
+            const uniqueAlertsMap = new Map();
+            alertsResp.alerts.forEach((alert: any) => {
+              const key = alert.name;
+              if (!uniqueAlertsMap.has(key)) {
+                uniqueAlertsMap.set(key, {
+                  ...alert,
+                  urls: [alert.url]
+                });
+              } else {
+                const existingAlert = uniqueAlertsMap.get(key);
+                if (!existingAlert.urls.includes(alert.url)) {
+                  existingAlert.urls.push(alert.url);
+                }
+              }
+            });
+            const uniqueAlerts = Array.from(uniqueAlertsMap.values());
+            const alertsWithTranslations = await Promise.all(
+              uniqueAlerts.map(async (alert: any, index: number) => {
+                try {
+                  const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
+                  return {
+                    ...alert,
+                    nonTechnicalDescription,
+                    risk: alert.risk || 'Unknown',
+                    confidence: alert.confidence || 'Unknown',
+                    tags: alert.tags || {},
+                    cweid: alert.cweid || '',
+                    wascid: alert.wascid || '',
+                    solution: alert.solution || '',
+                    reference: alert.reference || '',
+                    description: alert.description || '',
+                    urls: alert.urls || []
+                  };
+                } catch (translationError) {
+                  return {
+                    ...alert,
+                    nonTechnicalDescription: alert.description,
+                    risk: alert.risk || 'Unknown',
+                    confidence: alert.confidence || 'Unknown',
+                    tags: alert.tags || {},
+                    cweid: alert.cweid || '',
+                    wascid: alert.wascid || '',
+                    solution: alert.solution || '',
+                    reference: alert.reference || '',
+                    description: alert.description || '',
+                    urls: alert.urls || []
+                  };
+                }
+              })
+            );
+            await prisma.scanSession.update({
+              where: { id },
+              data: { activeResults: alertsWithTranslations as any },
+            });
+            console.log(`✅ Failsafe: Successfully saved ${alertsWithTranslations.length} alerts for session ${id}`);
+          } else {
+            console.error(`❌ Failsafe: No alerts found for session ${id}`);
+          }
+        }
+      } catch (failsafeError: any) {
+        console.error(`❌ Failsafe error for session ${id}:`, failsafeError.message);
       }
     }
   } catch (err: any) {

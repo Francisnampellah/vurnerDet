@@ -10,7 +10,80 @@ const prisma_1 = __importDefault(require("../lib/prisma"));
 const crypto_1 = __importDefault(require("crypto"));
 const auth_1 = require("../middleware/auth");
 const nodemailer_1 = __importDefault(require("nodemailer"));
+const https_1 = __importDefault(require("https"));
+const url_1 = require("url");
 const router = express_1.default.Router();
+// Test internet connectivity
+const testInternetConnectivity = async () => {
+    return new Promise((resolve) => {
+        const testUrl = 'https://www.google.com';
+        const url = new url_1.URL(testUrl);
+        const req = https_1.default.request({
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname,
+            method: 'GET',
+            timeout: 10000, // 10 seconds timeout
+        }, (res) => {
+            console.log(`Internet connectivity test: ${res.statusCode} - ${testUrl}`);
+            resolve(true);
+        });
+        req.on('error', (error) => {
+            console.error('Internet connectivity test failed:', error.message);
+            resolve(false);
+        });
+        req.on('timeout', () => {
+            console.error('Internet connectivity test timed out');
+            req.destroy();
+            resolve(false);
+        });
+        req.end();
+    });
+};
+// Test SMTP connectivity
+const testSMTPConnectivity = async () => {
+    return new Promise((resolve) => {
+        const transporter = nodemailer_1.default.createTransport({
+            host: "live.smtp.mailtrap.io",
+            port: 587,
+            auth: {
+                user: "api",
+                pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
+            },
+            connectionTimeout: 5000, // 5 seconds
+            greetingTimeout: 5000,
+            socketTimeout: 5000,
+        });
+        transporter.verify((error, success) => {
+            if (error) {
+                console.error('SMTP connectivity test failed:', error.message);
+                resolve(false);
+            }
+            else {
+                console.log('SMTP connectivity test: Success - Server is ready to take our messages');
+                resolve(true);
+            }
+        });
+    });
+};
+// Test network connectivity
+const testNetworkConnectivity = async () => {
+    console.log('=== Network Connectivity Test ===');
+    // Test internet connectivity
+    const internetOk = await testInternetConnectivity();
+    console.log(`Internet connectivity: ${internetOk ? '✅ OK' : '❌ FAILED'}`);
+    // Test SMTP connectivity
+    const smtpOk = await testSMTPConnectivity();
+    console.log(`SMTP connectivity: ${smtpOk ? '✅ OK' : '❌ FAILED'}`);
+    // Log environment variables (without sensitive data)
+    console.log('Mailtrap Configuration:');
+    console.log(`- Host: live.smtp.mailtrap.io`);
+    console.log(`- Port: 587`);
+    console.log(`- User: api`);
+    console.log(`- API Token: ${process.env.MAILTRAP_API_TOKEN ? 'SET' : 'NOT SET'}`);
+    console.log(`- From: ${process.env.SMTP_FROM || 'NOT SET'}`);
+    console.log('=== End Network Test ===');
+};
 // Generate refresh token
 const generateRefreshToken = async (userId) => {
     const token = crypto_1.default.randomBytes(40).toString('hex');
@@ -33,21 +106,59 @@ const generateAccessToken = (userId) => {
 // Helper to send OTP email
 const sendOtpEmail = async (email, otp) => {
     // Configure your transporter (update with your SMTP credentials)
-    const transporter = nodemailer_1.default.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT),
-        secure: false, // true for 465, false for other ports
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-        },
-    });
-    await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'no-reply@example.com',
-        to: email,
-        subject: 'Your Email Verification Code',
-        text: `Your verification code is: ${otp}`,
-    });
+    console.log("++++++++++++++++++++++++");
+    console.log(email);
+    console.log(otp);
+    console.log("++++++++++++++++++++++++");
+    // Run network connectivity tests first
+    await testNetworkConnectivity();
+    try {
+        const transporter = nodemailer_1.default.createTransport({
+            host: "live.smtp.mailtrap.io",
+            port: 587,
+            auth: {
+                user: "api",
+                pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
+            },
+            // Add timeout configurations to prevent hanging connections
+            connectionTimeout: 10000, // 10 seconds
+            greetingTimeout: 10000, // 10 seconds
+            socketTimeout: 10000, // 10 seconds
+        });
+        await transporter.sendMail({
+            from: process.env.SMTP_FROM || 'noreply@yourdomain.com',
+            to: email,
+            subject: 'Your Email Verification Code',
+            text: `Your verification code is: ${otp}`,
+        });
+    }
+    catch (error) {
+        console.error('Email sending error:', error);
+        // Handle specific email errors
+        if (error instanceof Error) {
+            if (error.message.includes('getaddrinfo EAI_AGAIN')) {
+                throw new Error('Email service temporarily unavailable due to network issues. Please try again later.');
+            }
+            else if (error.message.includes('Invalid login')) {
+                throw new Error('Email service authentication failed. Please check SMTP credentials.');
+            }
+            else if (error.message.includes('ECONNREFUSED')) {
+                throw new Error('Email service connection refused. Please check SMTP configuration.');
+            }
+            else if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.message.includes('Connection timeout')) {
+                throw new Error('Email service connection timed out. Please try again later.');
+            }
+            else if (error.message.includes('ENOTFOUND')) {
+                throw new Error('Email service host not found. Please check SMTP configuration.');
+            }
+            else {
+                throw new Error(`Email sending failed: ${error.message}`);
+            }
+        }
+        else {
+            throw new Error('Email sending failed due to an unknown error.');
+        }
+    }
 };
 // Register new user
 const registerHandler = async (req, res) => {
@@ -95,10 +206,19 @@ const registerHandler = async (req, res) => {
                     business: true
                 }
             });
-            // Try to send OTP email - if this fails, the entire transaction will be rolled back
-            await sendOtpEmail(email, otp);
             return { user, business };
         });
+        // Try to send OTP email, but don't fail registration if it fails
+        let emailSent = false;
+        let emailError = null;
+        try {
+            await sendOtpEmail(email, otp);
+            emailSent = true;
+        }
+        catch (error) {
+            console.error('Email sending failed but registration continued:', error);
+            emailError = error instanceof Error ? error.message : 'Unknown email error';
+        }
         res.status(201).json({
             user: {
                 id: result.user.id,
@@ -107,26 +227,20 @@ const registerHandler = async (req, res) => {
                 role: result.user.role,
                 business: result.user.business
             },
+            otp: emailSent ? undefined : otp, // Only return OTP if email failed
+            emailSent,
+            emailError,
             message: isFirstUser
-                ? 'Registration successful. You are the first user and have been assigned ADMIN role. Please check your email for the verification code.'
-                : 'Registration successful. Please check your email for the verification code.'
+                ? `Registration successful. You are the first user and have been assigned ADMIN role. ${emailSent ? 'Please check your email for the verification code.' : 'Email sending failed. Please use the OTP provided below.'}`
+                : `Registration successful. ${emailSent ? 'Please check your email for the verification code.' : 'Email sending failed. Please use the OTP provided below.'}`
         });
     }
     catch (error) {
         console.error('Registration error:', error);
-        // Check if it's an email sending error
-        if (error instanceof Error && error.message.includes('getaddrinfo EAI_AGAIN')) {
-            res.status(500).json({
-                error: 'Email service temporarily unavailable. Please try again later.',
-                details: 'Unable to send verification email due to network issues.'
-            });
-        }
-        else {
-            res.status(400).json({
-                error: 'Invalid registration data',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
+        res.status(400).json({
+            error: 'Invalid registration data',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 };
 // Login user
@@ -383,8 +497,25 @@ const forgotPasswordHandler = async (req, res) => {
             where: { email },
             data: { authEmailOtp: otp }
         });
-        await sendOtpEmail(email, otp);
-        res.json({ message: 'If the email exists, a reset code has been sent.' });
+        // Try to send OTP email, but don't fail if it doesn't work
+        let emailSent = false;
+        let emailError = null;
+        try {
+            await sendOtpEmail(email, otp);
+            emailSent = true;
+        }
+        catch (error) {
+            console.error('Email sending failed for forgot password:', error);
+            emailError = error instanceof Error ? error.message : 'Unknown email error';
+        }
+        res.json({
+            message: emailSent
+                ? 'If the email exists, a reset code has been sent.'
+                : 'Password reset initiated. Email sending failed. Please use the OTP provided below.',
+            otp: emailSent ? undefined : otp, // Only return OTP if email failed
+            emailSent,
+            emailError
+        });
     }
     catch (error) {
         res.status(400).json({ error: 'Failed to process forgot password request' });
@@ -558,4 +689,14 @@ router.post('/reset-password', resetPasswordHandler);
 router.get('/users', auth_1.auth, adminAuth, getAllUsersHandler);
 router.put('/users/:id', auth_1.auth, adminAuth, updateUserHandler);
 router.delete('/users/:id', auth_1.auth, adminAuth, deleteUserHandler);
+// Test endpoint for network connectivity (remove in production)
+router.get('/test-network', async (req, res) => {
+    try {
+        await testNetworkConnectivity();
+        res.json({ message: 'Network test completed. Check server logs for details.' });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Network test failed', details: error instanceof Error ? error.message : 'Unknown error' });
+    }
+});
 exports.default = router;
