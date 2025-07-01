@@ -522,9 +522,11 @@ async function updateScans() {
                 try {
                   console.log(`🔄 Translating alert ${index + 1}/${uniqueAlerts.length}...`);
                   const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
+                  const swahiliDescription = await translateAlertToSwahili(alert);
                   const processedAlert = {
                     ...alert,
                     nonTechnicalDescription,
+                    swahiliDescription,
                     risk: alert.risk || 'Unknown',
                     confidence: alert.confidence || 'Unknown',
                     tags: alert.tags || {},
@@ -540,6 +542,7 @@ async function updateScans() {
                   console.log(`✅ Processed alert ${index + 1} with translation:`, {
                     name: processedAlert.name,
                     hasTranslation: !!processedAlert.nonTechnicalDescription,
+                    hasSwahiliTranslation: !!processedAlert.swahiliDescription,
                     translationLength: processedAlert.nonTechnicalDescription?.length
                   });
 
@@ -549,6 +552,7 @@ async function updateScans() {
                   return {
                     ...alert,
                     nonTechnicalDescription: alert.description, // Fallback to original description
+                    swahiliDescription: alert.description, // Fallback to original description
                     risk: alert.risk || 'Unknown',
                     confidence: alert.confidence || 'Unknown',
                     tags: alert.tags || {},
@@ -563,31 +567,12 @@ async function updateScans() {
               })
             );
 
-            // Swahili translations
-            const alertsWithSwahili = await Promise.all(
-              uniqueAlerts.map(async (alert: any, index: number) => {
-                try {
-                  const swahiliDescription = await translateAlertToSwahili(alert);
-                  return {
-                    ...alert,
-                    swahiliDescription,
-                  };
-                } catch (translationError) {
-                  return {
-                    ...alert,
-                    swahiliDescription: alert.description,
-                  };
-                }
-              })
-            );
-
             if (alertsWithTranslations && alertsWithTranslations.length > 0) {
               console.log(`💾 Saving ${alertsWithTranslations.length} alerts with translations to database...`);
               await prisma.scanSession.update({
                 where: { id },
                 data: { 
-                  activeResults: alertsWithTranslations as any,
-                  swahiliResults: alertsWithSwahili as any
+                  activeResults: alertsWithTranslations as any
                 },
               });
               console.log(`✅ Successfully saved ${alertsWithTranslations.length} alerts for session ${id}`);
@@ -597,7 +582,6 @@ async function updateScans() {
                 where: { id },
                 data: { 
                   activeResults: [] as any,
-                  swahiliResults: [] as any,
                   activeStatus: 100
                 },
               });
@@ -641,9 +625,11 @@ async function updateScans() {
               uniqueAlerts.map(async (alert: any, index: number) => {
                 try {
                   const nonTechnicalDescription = await translateAlertToNonTechnical(alert);
+                  const swahiliDescription = await translateAlertToSwahili(alert);
                   return {
                     ...alert,
                     nonTechnicalDescription,
+                    swahiliDescription,
                     risk: alert.risk || 'Unknown',
                     confidence: alert.confidence || 'Unknown',
                     tags: alert.tags || {},
@@ -658,6 +644,7 @@ async function updateScans() {
                   return {
                     ...alert,
                     nonTechnicalDescription: alert.description,
+                    swahiliDescription: alert.description,
                     risk: alert.risk || 'Unknown',
                     confidence: alert.confidence || 'Unknown',
                     tags: alert.tags || {},
