@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteScan = exports.getScanById = exports.getAllScans = exports.startFullScan = void 0;
+exports.getDashboardStats = exports.deleteScan = exports.getScanById = exports.getAllScans = exports.startFullScan = void 0;
 const axios_1 = __importDefault(require("axios"));
 const client_1 = require("@prisma/client");
 const dns_1 = __importDefault(require("dns"));
@@ -165,12 +165,24 @@ const getAllScans = async (req, res) => {
     try {
         if (!userId)
             return res.status(401).json({ error: 'User not authenticated' });
-        let scans;
+        let scans, totalScans, totalVulnerabilities, userMap = {};
         if (userRole === 'ADMIN') {
             // Admin: get all scans
             scans = await prisma.scanSession.findMany({
                 orderBy: { createdAt: 'desc' }
             });
+            totalScans = await prisma.scanSession.count();
+            const allScans = await prisma.scanSession.findMany({ select: { activeResults: true } });
+            totalVulnerabilities = allScans.reduce((sum, scan) => {
+                if (Array.isArray(scan.activeResults)) {
+                    return sum + scan.activeResults.length;
+                }
+                return sum;
+            }, 0);
+            // Fetch user emails for the recent scans
+            const userIds = Array.from(new Set(scans.map(scan => scan.userId)));
+            const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } });
+            userMap = users.reduce((acc, user) => { acc[user.id] = user.email; return acc; }, {});
         }
         else {
             // Regular user: only get their scans
@@ -178,10 +190,30 @@ const getAllScans = async (req, res) => {
                 where: { userId },
                 orderBy: { createdAt: 'desc' }
             });
+            totalScans = await prisma.scanSession.count({ where: { userId } });
+            const userScans = await prisma.scanSession.findMany({ where: { userId }, select: { activeResults: true } });
+            totalVulnerabilities = userScans.reduce((sum, scan) => {
+                if (Array.isArray(scan.activeResults)) {
+                    return sum + scan.activeResults.length;
+                }
+                return sum;
+            }, 0);
         }
         return res.status(200).json({
             success: true,
-            data: scans
+            data: {
+                totalScans,
+                totalVulnerabilities,
+                recentScans: scans.map(scan => ({
+                    id: scan.id,
+                    url: scan.url,
+                    createdAt: scan.createdAt,
+                    activeStatus: scan.activeStatus,
+                    spiderStatus: scan.spiderStatus,
+                    vulnerabilities: Array.isArray(scan.activeResults) ? scan.activeResults.length : 0,
+                    userEmail: userMap[scan.userId] // will be undefined for non-admin
+                }))
+            }
         });
     }
     catch (err) {
@@ -265,6 +297,75 @@ const deleteScan = async (req, res) => {
     }
 };
 exports.deleteScan = deleteScan;
+const getDashboardStats = async (req, res) => {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const prisma = new client_1.PrismaClient();
+    try {
+        if (!userId)
+            return res.status(401).json({ error: 'User not authenticated' });
+        let scans, totalScans, totalVulnerabilities, userMap = {};
+        if (userRole === 'ADMIN') {
+            // Admin: get all scans (no user relation in Prisma, so fetch users separately)
+            scans = await prisma.scanSession.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 5
+            });
+            totalScans = await prisma.scanSession.count();
+            const allScans = await prisma.scanSession.findMany({ select: { activeResults: true } });
+            totalVulnerabilities = allScans.reduce((sum, scan) => {
+                if (Array.isArray(scan.activeResults)) {
+                    return sum + scan.activeResults.length;
+                }
+                return sum;
+            }, 0);
+            // Fetch user emails for the recent scans
+            const userIds = Array.from(new Set(scans.map(scan => scan.userId)));
+            const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } });
+            userMap = users.reduce((acc, user) => { acc[user.id] = user.email; return acc; }, {});
+        }
+        else {
+            // Regular user: only their scans
+            scans = await prisma.scanSession.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                take: 5
+            });
+            totalScans = await prisma.scanSession.count({ where: { userId } });
+            const userScans = await prisma.scanSession.findMany({ where: { userId }, select: { activeResults: true } });
+            totalVulnerabilities = userScans.reduce((sum, scan) => {
+                if (Array.isArray(scan.activeResults)) {
+                    return sum + scan.activeResults.length;
+                }
+                return sum;
+            }, 0);
+        }
+        return res.status(200).json({
+            success: true,
+            data: {
+                totalScans,
+                totalVulnerabilities,
+                recentScans: scans.map(scan => ({
+                    id: scan.id,
+                    url: scan.url,
+                    createdAt: scan.createdAt,
+                    activeStatus: scan.activeStatus,
+                    spiderStatus: scan.spiderStatus,
+                    vulnerabilities: Array.isArray(scan.activeResults) ? scan.activeResults.length : 0,
+                    userEmail: userMap[scan.userId] // will be undefined for non-admin
+                }))
+            }
+        });
+    }
+    catch (err) {
+        console.error('Dashboard stats error:', err.message);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch dashboard stats'
+        });
+    }
+};
+exports.getDashboardStats = getDashboardStats;
 // import axios from 'axios';
 // import { Request, Response } from 'express';
 // import { PrismaClient } from '@prisma/client';

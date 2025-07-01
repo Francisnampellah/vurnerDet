@@ -47,7 +47,7 @@ const testSMTPConnectivity = async (): Promise<boolean> => {
   return new Promise((resolve) => {
     const transporter = nodemailer.createTransport({
       host: "live.smtp.mailtrap.io",
-      port: 587,
+      port: 2525,
       auth: {
         user: "api",
         pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
@@ -136,7 +136,7 @@ const sendOtpEmail = async (email: string, otp: string) => {
   try {
     const transporter = nodemailer.createTransport({
       host: "live.smtp.mailtrap.io",
-      port: 587,
+      port: 2525,
       auth: {
         user: "api",
         pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
