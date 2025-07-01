@@ -200,56 +200,24 @@ export const getAllScans = async (req: Request, res: Response) => {
   try {
     if (!userId) return res.status(401).json({ error: 'User not authenticated' });
 
-    let scans: any[], totalScans: number, totalVulnerabilities: number, userMap: Record<string, string> = {};
+    let scans;
     
     if (userRole === 'ADMIN') {
       // Admin: get all scans
       scans = await prisma.scanSession.findMany({
         orderBy: { createdAt: 'desc' }
       });
-      totalScans = await prisma.scanSession.count();
-      const allScans = await prisma.scanSession.findMany({ select: { activeResults: true } });
-      totalVulnerabilities = allScans.reduce((sum, scan) => {
-        if (Array.isArray(scan.activeResults)) {
-          return sum + scan.activeResults.length;
-        }
-        return sum;
-      }, 0);
-      // Fetch user emails for the recent scans
-      const userIds = Array.from(new Set(scans.map(scan => scan.userId)));
-      const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } });
-      userMap = users.reduce((acc, user) => { acc[user.id] = user.email; return acc; }, {} as Record<string, string>);
     } else {
       // Regular user: only get their scans
       scans = await prisma.scanSession.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' }
       });
-      totalScans = await prisma.scanSession.count({ where: { userId } });
-      const userScans = await prisma.scanSession.findMany({ where: { userId }, select: { activeResults: true } });
-      totalVulnerabilities = userScans.reduce((sum, scan) => {
-        if (Array.isArray(scan.activeResults)) {
-          return sum + scan.activeResults.length;
-        }
-        return sum;
-      }, 0);
     }
 
     return res.status(200).json({
       success: true,
-      data: {
-        totalScans,
-        totalVulnerabilities,
-        recentScans: scans.map(scan => ({
-          id: scan.id,
-          url: scan.url,
-          createdAt: scan.createdAt,
-          activeStatus: scan.activeStatus,
-          spiderStatus: scan.spiderStatus,
-          vulnerabilities: Array.isArray(scan.activeResults) ? scan.activeResults.length : 0,
-          userEmail: userMap[scan.userId] // will be undefined for non-admin
-        }))
-      }
+      data: scans
     });
   } catch (err: any) {
     console.error('Get all scans error:', err.message);
