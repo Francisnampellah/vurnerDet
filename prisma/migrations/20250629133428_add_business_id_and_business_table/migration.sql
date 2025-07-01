@@ -18,4 +18,8 @@ ALTER TABLE "User" ADD COLUMN "businessId" TEXT NOT NULL;
 CREATE UNIQUE INDEX "User_businessId_key" ON "User"("businessId");
 
 -- AddForeignKey
-ALTER TABLE "User" ADD CONSTRAINT "User_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "Business"("id") ON DELETE RESTRICT ON UPDATE CASCADE; 
+ALTER TABLE "User" ADD CONSTRAINT "User_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "Business"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AlterTable
+ALTER TABLE "ScanSession"
+ADD COLUMN "swahiliResults" JSONB; 

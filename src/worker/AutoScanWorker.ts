@@ -8,7 +8,7 @@ dotenv.config();
 const prisma = new PrismaClient();
 const ZAP_API_BASE = 'http://zap:8080';
 const ZAP_API_KEY = '';
-const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API || "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" ;
+const HUGGINGFACE_API_KEY = process.env.HUGG_FACE_API  ;
 const HUGGINGFACE_API_URL = 'https://router.huggingface.co/novita/v3/openai/chat/completions';
 
 // Define interfaces for ZAP API responses
@@ -200,6 +200,54 @@ async function translateAlertToNonTechnical(alert: any): Promise<string> {
     return translatedText;
   } catch (error: any) {
     console.error('❌ Error translating alert:', {
+      error: error.message,
+      response: error.response?.data,
+      alertName: alert.name
+    });
+    return alert.description; // Return original description if translation fails
+  }
+}
+
+// Add Swahili translation function
+async function translateAlertToSwahili(alert: any): Promise<string> {
+  try {
+    console.log(`🌍 Translating alert to Swahili: ${alert.name}`);
+    const response = await axios.post(
+      HUGGINGFACE_API_URL,
+      {
+        model: "deepseek/deepseek-v3-0324",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant that translates security alerts into Swahili. Keep your translations concise (maximum 100 words), clear, and properly formatted as plain text without markdown or special formatting."
+          },
+          {
+            role: "user",
+            content: `Please translate this security alert into Swahili. Keep it under 100 words and use plain text formatting: ${alert.description}`
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 200
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000, // 30 second timeout for translation
+      }
+    );
+
+    if (!response.data || !response.data.choices || !response.data.choices[0]?.message?.content) {
+      console.error('❌ Invalid response format from Hugging Face API (Swahili):', JSON.stringify(response.data));
+      return alert.description;
+    }
+
+    const swahiliText = response.data.choices[0].message.content.trim();
+    console.log(`✅ Successfully translated alert to Swahili. Original: "${alert.description.substring(0, 100)}..." -> Swahili: "${swahiliText.substring(0, 100)}..."`);
+    return swahiliText;
+  } catch (error: any) {
+    console.error('❌ Error translating alert to Swahili:', {
       error: error.message,
       response: error.response?.data,
       alertName: alert.name
@@ -515,12 +563,31 @@ async function updateScans() {
               })
             );
 
+            // Swahili translations
+            const alertsWithSwahili = await Promise.all(
+              uniqueAlerts.map(async (alert: any, index: number) => {
+                try {
+                  const swahiliDescription = await translateAlertToSwahili(alert);
+                  return {
+                    ...alert,
+                    swahiliDescription,
+                  };
+                } catch (translationError) {
+                  return {
+                    ...alert,
+                    swahiliDescription: alert.description,
+                  };
+                }
+              })
+            );
+
             if (alertsWithTranslations && alertsWithTranslations.length > 0) {
               console.log(`💾 Saving ${alertsWithTranslations.length} alerts with translations to database...`);
               await prisma.scanSession.update({
                 where: { id },
                 data: { 
-                  activeResults: alertsWithTranslations as any
+                  activeResults: alertsWithTranslations as any,
+                  swahiliResults: alertsWithSwahili as any
                 },
               });
               console.log(`✅ Successfully saved ${alertsWithTranslations.length} alerts for session ${id}`);
@@ -530,6 +597,7 @@ async function updateScans() {
                 where: { id },
                 data: { 
                   activeResults: [] as any,
+                  swahiliResults: [] as any,
                   activeStatus: 100
                 },
               });
