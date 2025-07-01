@@ -119,15 +119,38 @@ const generateAccessToken = (userId: string): string => {
   );
 };
 
-// Helper to send OTP email
-const sendOtpEmail = async (email: string, otp: string) => {
-  // Use external email relay API
+type OtpPurpose = 'verify' | 'reset';
+const sendOtpEmail = async (email: string, otp: string, purpose: OtpPurpose = 'verify') => {
   const apiUrl = 'https://mail-relay.onrender.com/send-email';
   const apiKey = process.env.API_KEY || 'd3c4f0a86b59f04e8b373f8ae9e2a3a3a41b5d2dd7c2c5b02be8468e8f319f8e';
+  let subject = 'Your Email Verification Code';
+  let text =
+    `Hello,
+
+Thank you for signing up with us! To complete your registration, please use the verification code below:
+
+🔐 Verification Code: ${otp}
+
+If you did not request this, please ignore this email.
+
+Best regards,\nThe VulnGuard Team`;
+  if (purpose === 'reset') {
+    subject = 'Your Password Reset Code';
+    text =
+      `Hello,
+
+We received a request to reset your password. Please use the code below to proceed:
+
+🔐 Password Reset Code: ${otp}
+
+If you did not request a password reset, you can safely ignore this email.
+
+Best regards,\nThe VulnGuard Team`;
+  }
   const data = {
     to: email,
-    subject: 'Your Email Verification Code',
-    text: `Your verification code is: ${otp}`
+    subject,
+    text
   };
   try {
     await axios.post(apiUrl, data, {
@@ -138,7 +161,7 @@ const sendOtpEmail = async (email: string, otp: string) => {
     });
   } catch (error) {
     console.error('Email sending error:', error);
-    throw new Error('Failed to send verification email.');
+    throw new Error('Failed to send email.');
   }
 };
 
@@ -204,7 +227,7 @@ const registerHandler: RequestHandler = async (req: Request, res: Response): Pro
     let emailError = null;
     
     try {
-      await sendOtpEmail(email, otp);
+      await sendOtpEmail(email, otp, 'verify');
       emailSent = true;
     } catch (error) {
       console.error('Email sending failed but registration continued:', error);
@@ -497,7 +520,7 @@ const resendOtpHandler: RequestHandler = async (req: Request, res: Response): Pr
       data: { authEmailOtp: otp },
     });
 
-    await sendOtpEmail(email, otp);
+    await sendOtpEmail(email, otp, 'verify');
     res.json({ message: 'A new OTP has been sent to your email.' });
 
   } catch (error) {
@@ -532,7 +555,7 @@ const forgotPasswordHandler: RequestHandler = async (req: Request, res: Response
     let emailError = null;
     
     try {
-      await sendOtpEmail(email, otp);
+      await sendOtpEmail(email, otp, 'reset');
       emailSent = true;
     } catch (error) {
       console.error('Email sending failed for forgot password:', error);
