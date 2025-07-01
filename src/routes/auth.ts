@@ -7,6 +7,7 @@ import { auth } from '../middleware/auth';
 import nodemailer from 'nodemailer';
 import https from 'https';
 import { URL } from 'url';
+import axios from 'axios';
 
 const router: Router = express.Router();
 
@@ -120,60 +121,24 @@ const generateAccessToken = (userId: string): string => {
 
 // Helper to send OTP email
 const sendOtpEmail = async (email: string, otp: string) => {
-  // Configure your transporter (update with your SMTP credentials)
-
-  console.log("++++++++++++++++++++++++")
-
-  console.log(email)
-
-  console.log(otp)
-
-  console.log("++++++++++++++++++++++++")
-
-  // Run network connectivity tests first
-  await testNetworkConnectivity();
-
+  // Use external email relay API
+  const apiUrl = 'https://mail-relay.onrender.com/send-email';
+  const apiKey = process.env.API_KEY || 'd3c4f0a86b59f04e8b373f8ae9e2a3a3a41b5d2dd7c2c5b02be8468e8f319f8e';
+  const data = {
+    to: email,
+    subject: 'Your Email Verification Code',
+    text: `Your verification code is: ${otp}`
+  };
   try {
-    const transporter = nodemailer.createTransport({
-      host: "live.smtp.mailtrap.io",
-      port: 2525,
-      auth: {
-        user: "api",
-        pass: process.env.MAILTRAP_API_TOKEN || "7f85c4911d44ef254a48f62cbe27bd57"
-      },
-      // Add timeout configurations to prevent hanging connections
-      connectionTimeout: 10000, // 10 seconds
-      greetingTimeout: 10000,   // 10 seconds
-      socketTimeout: 10000,     // 10 seconds
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@yourdomain.com',
-      to: email,
-      subject: 'Your Email Verification Code',
-      text: `Your verification code is: ${otp}`,
+    await axios.post(apiUrl, data, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': apiKey
+      }
     });
   } catch (error) {
     console.error('Email sending error:', error);
-    
-    // Handle specific email errors
-    if (error instanceof Error) {
-      if (error.message.includes('getaddrinfo EAI_AGAIN')) {
-        throw new Error('Email service temporarily unavailable due to network issues. Please try again later.');
-      } else if (error.message.includes('Invalid login')) {
-        throw new Error('Email service authentication failed. Please check SMTP credentials.');
-      } else if (error.message.includes('ECONNREFUSED')) {
-        throw new Error('Email service connection refused. Please check SMTP configuration.');
-      } else if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.message.includes('Connection timeout')) {
-        throw new Error('Email service connection timed out. Please try again later.');
-      } else if (error.message.includes('ENOTFOUND')) {
-        throw new Error('Email service host not found. Please check SMTP configuration.');
-      } else {
-        throw new Error(`Email sending failed: ${error.message}`);
-      }
-    } else {
-      throw new Error('Email sending failed due to an unknown error.');
-    }
+    throw new Error('Failed to send verification email.');
   }
 };
 
